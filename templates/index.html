@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flask Pong</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <h1>Flask Pong</h1>
+
+    <div id="game-container">
+        <div id="game-board" style="width: {{ game_width }}px; height: {{ game_height }}px;">
+            <div id="ball"></div>
+            <div id="player-paddle"></div>
+        </div>
+    </div>
+
+    <div id="game-info">
+        <p>Score: <span id="score">0</span></p>
+        <p id="game-over-message" class="hidden">Game Over! Press SPACE to restart.</p>
+        <button id="start-button">Start Game</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='js/game.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background-color: #222;
+    color: #eee;
+    margin: 0;
+    padding: 20px;
+}
+
+h1 {
+    margin-bottom: 20px;
+    color: #0f0; /* Grøn farve for retro-følelse */
+}
+
+#game-container {
+    border: 5px solid #0f0; /* Grøn ramme */
+    background-color: #000;
+    position: relative;
+    overflow: hidden; /* Sikrer at bolden ikke kan tegnes udenfor brættet */
+}
+
+#game-board {
+    position: relative;
+    width: 800px; /* Disse vil blive overskrevet af Flask Jinja variabler */
+    height: 600px; /* Disse vil blive overskrevet af Flask Jinja variabler */
+}
+
+#ball {
+    position: absolute;
+    width: 20px; /* 2 * BALL_RADIUS */
+    height: 20px; /* 2 * BALL_RADIUS */
+    background-color: white;
+    border-radius: 50%;
+    left: 0; /* Disse vil blive opdateret af JS */
+    top: 0;  /* Disse vil blive opdateret af JS */
+}
+
+#player-paddle {
+    position: absolute;
+    width: 100px; /* PADDLE_WIDTH */
+    height: 15px; /* PADDLE_HEIGHT */
+    background-color: white;
+    bottom: 0;
+    left: 0; /* Denne vil blive opdateret af JS */
+}
+
+#game-info {
+    margin-top: 20px;
+    font-size: 1.2em;
+    text-align: center;
+}
+
+#game-over-message {
+    color: red;
+    font-weight: bold;
+    font-size: 1.5em;
+    margin-top: 10px;
+}
+
+.hidden {
+    display: none;
+}
+
+#start-button {
+    padding: 10px 20px;
+    font-size: 1.2em;
+    background-color: #0f0;
+    color: black;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-top: 15px;
+}
+
+#start-button:hover {
+    background-color: #0a0;
+}
