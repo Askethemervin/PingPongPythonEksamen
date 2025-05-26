@@ -1,1 +1,1 @@
-# PingPongPythonEksamen
+# PongPythonEksamen
