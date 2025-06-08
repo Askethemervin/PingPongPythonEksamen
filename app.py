@@ -2,6 +2,8 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 import time
 import threading
+import eventlet # Tilføj denne linje
+eventlet.monkey_patch()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key_here' # Husk at ændre dette til en rigtig hemmelig nøgle i et rigtigt projekt!
