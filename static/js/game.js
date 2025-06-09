@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Forbind til Socket.IO serveren
     const socket = io();
-
+    
     // Hent DOM-elementer
     const ball = document.getElementById('ball');
     const playerPaddle = document.getElementById('player-paddle');
@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const gameOverMessage = document.getElementById('game-over-message');
     const startButton = document.getElementById('start-button');
     const gameBoard = document.getElementById('game-board');
+
+    const existingBricks = new Map();
 
     // Spilkonstanter (match med Python)
     const GAME_WIDTH = 800; // Skal matche Python
@@ -43,6 +45,37 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.game_started && !data.game_over) {
             startButton.classList.add('hidden');
         }
+        const brickIds = new Set();
+
+        data.bricks.forEach((brick, index) => {
+            const id = `brick-${index}`;
+            brickIds.add(id);
+
+        let brickElem = existingBricks.get(id);
+        if (!brickElem) {
+            brickElem = document.createElement('div');
+            brickElem.id = id;
+            brickElem.classList.add('brick');
+            if (!brick.breakable) {
+                brickElem.classList.add('unbreakable');
+            }
+            gameBoard.appendChild(brickElem);
+            existingBricks.set(id, brickElem);
+        }
+
+        brickElem.style.left = `${brick.x}px`;
+        brickElem.style.top = `${brick.y}px`;
+        brickElem.style.width = `${brick.width}px`;
+        brickElem.style.height = `${brick.height}px`;
+    });
+
+// Fjern bricks der ikke længere findes
+    for (let [id, elem] of existingBricks.entries()) {
+        if (!brickIds.has(id)) {
+            elem.remove();
+            existingBricks.delete(id);
+        }
+    }
     });
 
     // Lyt efter tastetryk for at flytte paddle

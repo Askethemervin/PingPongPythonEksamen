@@ -2,6 +2,7 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 import time
 import threading
+import random
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key_here' # Husk at ændre dette til en rigtig hemmelig nøgle i et rigtigt projekt!
@@ -18,8 +19,59 @@ GAME_LOOP_INTERVAL_MS = 16 # Ca. 60 FPS (1000ms / 60)
 # --- Spillets tilstand ---
 class Game:
     def __init__(self):
+        self.levels = self.load_levels()
+        self.level_index = 0
         self.reset_game()
         self._game_loop_thread = None # Tråden til spil-logikken
+
+    def generate_brick_grid(self, rows, cols, start_x, start_y, brick_width, brick_height, spacing_x, spacing_y, pattern_fn):
+        bricks = []
+        for row in range(rows):
+            for col in range(cols):
+                x = start_x + col * (brick_width + spacing_x)
+                y = start_y + row * (brick_height + spacing_y)
+                breakable = pattern_fn(row, col)
+                bricks.append({
+                    'x': x,
+                    'y': y,
+                    'width': brick_width,
+                    'height': brick_height,
+                    'breakable': breakable
+                })
+        return bricks
+    
+    
+    def random_brick_pattern(self, row, col, difficulty):
+        chance_unbreakable = 0.05 + (0.03 * difficulty)
+        return random.random() > chance_unbreakable
+    
+    def load_levels(self):
+        return [
+            self.generate_brick_grid(
+                rows=4, cols=13,
+                start_x=0, start_y=50,
+                brick_width=60,
+                brick_height=20,
+                spacing_x=1,
+                spacing_y=5,
+                pattern_fn=lambda r, c: not (r == 0 and c % 3 == 0)
+            ),
+            self.generate_brick_grid(
+                rows=6, cols=12,
+                start_x=30, start_y=40,
+                brick_width=50, brick_height=20,
+                spacing_x=4, spacing_y=4,
+                pattern_fn=lambda r, c: (r + c) % 4 != 0
+            ),
+            self.generate_brick_grid(
+                rows=3, cols=8,
+                start_x=100, start_y=70,
+                brick_width=70, brick_height=25,
+                spacing_x=6, spacing_y=6,
+                pattern_fn=lambda r, c: True
+            )
+        ]
+
 
     def reset_game(self):
         self.ball_x = GAME_WIDTH // 2
@@ -31,6 +83,18 @@ class Game:
         self.score = 0
         self.game_over = False
         self.game_started = False # Ny flag for at styre start
+        difficulty = self.level_index
+        self.bricks = self.generate_brick_grid(
+            rows=5,
+            cols=13,
+            start_x=0,
+            start_y=50,
+            brick_width=60,
+            brick_height=20,
+            spacing_x=1,
+            spacing_y=5,
+            pattern_fn=lambda r, c: self.random_brick_pattern(r, c, difficulty)
+        )
 
     def get_game_state(self):
         return {
@@ -39,7 +103,8 @@ class Game:
             'player_paddle_x': self.player_paddle_x,
             'score': self.score,
             'game_over': self.game_over,
-            'game_started': self.game_started
+            'game_started': self.game_started,
+            'bricks': self.bricks
         }
 
     def update_game_state(self):
@@ -72,6 +137,33 @@ class Game:
         if self.ball_y + BALL_RADIUS > GAME_HEIGHT:
             self.game_over = True
             self.game_started = False # Spillet stopper
+
+        remaining_bricks = []
+        for brick in self.bricks:
+            if self.check_collision_with_brick(brick):
+                if brick['breakable']:
+                    self.score += 5
+                else:
+                    remaining_bricks.append(brick)
+                self.ball_dy *= -1
+            else:
+                remaining_bricks.append(brick)
+
+        self.bricks = remaining_bricks
+            
+        if all(not b['breakable'] for b in self.bricks):
+            self.level_index = (self.level_index + 1) % len(self.levels)
+            self.reset_game()
+        
+    def check_collision_with_brick(self, brick):
+        bx, by = self.ball_x, self.ball_y
+        r = BALL_RADIUS
+        return (
+            bx + r > brick['x'] and
+            bx - r < brick['x'] + brick['width'] and
+            by + r > brick['y'] and
+            by - r < brick['y'] + brick['height']
+        )
 
     def move_paddle(self, direction):
         if self.game_over:
