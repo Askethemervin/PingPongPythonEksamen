@@ -2,6 +2,8 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 import time
 import threading
+import eventlet # Tilføj denne linje
+eventlet.monkey_patch()
 import random
 
 app = Flask(__name__)
