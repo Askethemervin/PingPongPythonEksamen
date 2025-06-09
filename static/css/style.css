@@ -5,60 +5,82 @@ body {
     align-items: center;
     justify-content: center;
     min-height: 100vh;
+    width: 100vw;
     background-color: #222;
     color: #eee;
     margin: 0;
-    padding: 20px;
+    padding: 0;
+    overflow: hidden;
 }
 
 h1 {
     margin-bottom: 20px;
-    color: #0f0; /* Grøn farve for retro-følelse */
+    color: #0f0;
+}
+
+#main-content-wrapper {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 30px;
 }
 
 #game-container {
-    border: 5px solid #0f0; /* Grøn ramme */
+    border: 5px solid #0f0;
     background-color: #000;
     position: relative;
-    overflow: hidden; /* Sikrer at bolden ikke kan tegnes udenfor brættet */
+    overflow: hidden;
 }
 
 #game-board {
     position: relative;
-    width: 800px; /* Disse vil blive overskrevet af Flask Jinja variabler */
-    height: 600px; /* Disse vil blive overskrevet af Flask Jinja variabler */
+    width: 800px;
+    height: 600px;
 }
 
 #ball {
     position: absolute;
-    width: 20px; /* 2 * BALL_RADIUS */
-    height: 20px; /* 2 * BALL_RADIUS */
+    width: 20px;
+    height: 20px;
     background-color: white;
     border-radius: 50%;
-    left: 0; /* Disse vil blive opdateret af JS */
-    top: 0;  /* Disse vil blive opdateret af JS */
+    transition: left 0.016s linear, top 0.016s linear;
 }
 
 #player-paddle {
     position: absolute;
-    width: 100px; /* PADDLE_WIDTH */
-    height: 15px; /* PADDLE_HEIGHT */
+    width: 100px;
+    height: 15px;
     background-color: white;
     bottom: 0;
-    left: 0; /* Denne vil blive opdateret af JS */
-}
-
-#game-info {
-    margin-top: 20px;
-    font-size: 1.2em;
-    text-align: center;
+    transition: left 0.016s linear;
 }
 
 #game-over-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     color: red;
     font-weight: bold;
     font-size: 1.5em;
-    margin-top: 10px;
+    text-align: center;
+    width: 100%;
+    z-index: 10;
+}
+
+#game-info {
+    margin-top: 0;
+    font-size: 1.2em;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 10px;
+    border: 1px solid #0a0;
+    border-radius: 5px;
+    background-color: #1a1a1a;
 }
 
 .hidden {

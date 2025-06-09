@@ -2,7 +2,7 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 import time
 import threading
-import eventlet # Tilføj denne linje
+import eventlet
 eventlet.monkey_patch()
 import random
 
@@ -76,12 +76,12 @@ class Game:
 
 
     def reset_game(self):
-        self.ball_x = GAME_WIDTH // 2
-        self.ball_y = GAME_HEIGHT // 2
-        self.ball_dx = 5  # Hastighed i x-retning
-        self.ball_dy = 5  # Hastighed i y-retning (initialt nedad)
-
         self.player_paddle_x = (GAME_WIDTH - PADDLE_WIDTH) // 2
+        self.ball_x = self.player_paddle_x + (PADDLE_WIDTH // 2)
+        self.ball_y = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS - 1
+        self.ball_dx = 0
+        self.ball_dy = 0
+
         self.score = 0
         self.game_over = False
         self.game_started = False # Ny flag for at styre start
@@ -113,27 +113,37 @@ class Game:
         if self.game_over or not self.game_started:
             return
 
+        if not self.ball_moving:
+            self.ball_x = self.player_paddle_x + (PADDLE_WIDTH // 2)
+            self.ball_y = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS - 1
+            return
+
         # Flyt bolden
         self.ball_x += self.ball_dx
         self.ball_y += self.ball_dy
 
         # Kollision med vægge (venstre/højre)
-        if self.ball_x - BALL_RADIUS < 0 or self.ball_x + BALL_RADIUS > GAME_WIDTH:
-            self.ball_dx *= -1 # Vend x-retning
+        if self.ball_x - BALL_RADIUS < 0:
+            self.ball_x = BALL_RADIUS
+            self.ball_dx *= -1
+        elif self.ball_x + BALL_RADIUS > GAME_WIDTH:
+            self.ball_x = GAME_WIDTH - BALL_RADIUS
+            self.ball_dx *= -1
 
         # Kollision med topvæggen
         if self.ball_y - BALL_RADIUS < 0:
-            self.ball_dy *= -1 # Vend y-retning
+            self.ball_y = BALL_RADIUS
+            self.ball_dy *= -1
 
         # Kollision med spillerens paddle
-        # Check om bolden er ved paddle's y-niveau ELLER lige over den
         if (self.ball_y + BALL_RADIUS >= GAME_HEIGHT - PADDLE_HEIGHT and
-            self.ball_y + BALL_RADIUS <= GAME_HEIGHT): # Tjek for at fange bolden kun når den er ved bunden
-            # Check om boldens x-position er inden for paddle's x-område
+            self.ball_y + BALL_RADIUS < GAME_HEIGHT - PADDLE_HEIGHT + abs(self.ball_dy)
+            ):
             if (self.ball_x + BALL_RADIUS > self.player_paddle_x and
                 self.ball_x - BALL_RADIUS < self.player_paddle_x + PADDLE_WIDTH):
-                self.ball_dy *= -1 # Vend y-retning
+                self.ball_dy *= -1
                 self.score += 1
+                self.ball_y = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS
 
         # Bolden passerer forbi paddle'en (Game Over)
         if self.ball_y + BALL_RADIUS > GAME_HEIGHT:
@@ -171,22 +181,33 @@ class Game:
         if self.game_over:
             return
 
-        if direction == 'left':
-            self.player_paddle_x = max(0, self.player_paddle_x - 20) # Flyt med 20 pixels
-        elif direction == 'right':
-            self.player_paddle_x = min(GAME_WIDTH - PADDLE_WIDTH, self.player_paddle_x + 20) # Flyt med 20 pixels
+        # DEFINER EN PADLE_BEVÆGELSESHASTIGHED HER
+        PADDLE_MOVE_AMOUNT = 35 # Du kan justere denne værdi (f.eks. 30, 40, 50)
+
+        if not self.ball_moving:
+            if direction == 'left':
+                self.player_paddle_x = max(0, self.player_paddle_x - PADDLE_MOVE_AMOUNT) # <-- Ændret fra 20
+                self.ball_x = self.player_paddle_x + (PADDLE_WIDTH // 2)
+            elif direction == 'right':
+                self.player_paddle_x = min(GAME_WIDTH - PADDLE_WIDTH, self.player_paddle_x + PADDLE_MOVE_AMOUNT) # <-- Ændret fra 20
+                self.ball_x = self.player_paddle_x + (PADDLE_WIDTH // 2)
+        else:
+            if direction == 'left':
+                self.player_paddle_x = max(0, self.player_paddle_x - PADDLE_MOVE_AMOUNT) # <-- Ændret fra 20
+            elif direction == 'right':
+                self.player_paddle_x = min(GAME_WIDTH - PADDLE_WIDTH, self.player_paddle_x + PADDLE_MOVE_AMOUNT) # <-- Ændret fra 20
 
     def start_game_loop(self):
         if self._game_loop_thread is None or not self._game_loop_thread.is_alive():
             self._game_loop_thread = threading.Thread(target=self._game_loop_run)
-            self._game_loop_thread.daemon = True # Gør tråden til en dæmon, så den lukker med hovedprogrammet
+            self._game_loop_thread.daemon = True
             self._game_loop_thread.start()
 
     def _game_loop_run(self):
-        while not self.game_over: # Løb indtil spillet er slut
+        while not self.game_over:
             start_time = time.time()
             self.update_game_state()
-            socketio.emit('game_state', self.get_game_state()) # Send opdateret tilstand til klienten
+            socketio.emit('game_state', self.get_game_state())
 
             elapsed_time_ms = (time.time() - start_time) * 1000
             sleep_time = (GAME_LOOP_INTERVAL_MS - elapsed_time_ms) / 1000.0
@@ -205,7 +226,7 @@ def index():
 @socketio.on('connect')
 def test_connect():
     print('Client connected')
-    emit('game_state', game.get_game_state()) # Send initial tilstand ved forbindelse
+    emit('game_state', game.get_game_state())
 
 @socketio.on('disconnect')
 def test_disconnect():
@@ -215,16 +236,20 @@ def test_disconnect():
 def handle_paddle_move(data):
     direction = data['direction']
     game.move_paddle(direction)
-    # Ingen grund til at sende game_state her, da game loop'en allerede gør det.
 
 @socketio.on('start_game')
 def handle_start_game():
-    if not game.game_started and game.game_over: # Nulstil kun hvis spillet er slut
-        game.reset_game()
-    game.game_started = True
-    game.start_game_loop()
-    emit('game_state', game.get_game_state()) # Send den nulstillede/startede tilstand
+    if not game.game_started:
+        if game.game_over:
+            game.reset_game()
+        
+        game.game_started = True
+        game.ball_moving = True
+        game.ball_dx = 5 if game.ball_x < GAME_WIDTH // 2 else -5
+        game.ball_dy = -5
+
+        game.start_game_loop()
+        emit('game_state', game.get_game_state())
 
 if __name__ == '__main__':
-    # Brugge allow_unsafe_werkzeug=True kun til udvikling. Ikke i produktion!
     socketio.run(app, debug=True, allow_unsafe_werkzeug=True, port=5000)
