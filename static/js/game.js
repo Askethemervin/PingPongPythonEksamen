@@ -7,16 +7,34 @@ document.addEventListener('DOMContentLoaded', () => {
     const playerPaddle = document.getElementById('player-paddle');
     const scoreDisplay = document.getElementById('score');
     const gameOverMessage = document.getElementById('game-over-message');
-    const startButton = document.getElementById('start-button');
+    // const startButton = document.getElementById('start-button'); // FJERNET
     const gameBoard = document.getElementById('game-board');
 
     // Spilkonstanter (match med Python)
-    const GAME_WIDTH = 800; // Skal matche Python
-    const GAME_HEIGHT = 600; // Skal matche Python
-    const PADDLE_HEIGHT = 15; // Skal matche Python
+    const GAME_WIDTH = 800;
+    const GAME_HEIGHT = 600;
+    const PADDLE_HEIGHT = 15;
+    const BALL_RADIUS = 10;
+    const PADDLE_WIDTH = 100;
+    const GAME_LOOP_INTERVAL_MS = 16;
 
-    // Initial position for paddle (bunden af skærmen)
+    // Sæt initial størrelse på bolden (passer til BALL_RADIUS)
+    ball.style.width = `${BALL_RADIUS * 2}px`;
+    ball.style.height = `${BALL_RADIUS * 2}px`;
+
+    // Sæt initial størrelse og position på paddle
+    playerPaddle.style.width = `${PADDLE_WIDTH}px`;
+    playerPaddle.style.height = `${PADDLE_HEIGHT}px`;
     playerPaddle.style.bottom = '0px';
+
+    // Sæt størrelsen på game-board baseret på Flask variabler
+    gameBoard.style.width = `${GAME_WIDTH}px`;
+    gameBoard.style.height = `${GAME_HEIGHT}px`;
+
+    // Definer CSS transition styles. Disse vil blive anvendt dynamisk.
+    const ballTransitionStyle = `left ${GAME_LOOP_INTERVAL_MS / 1000}s linear, top ${GAME_LOOP_INTERVAL_MS / 1000}s linear`;
+    const paddleTransitionStyle = `left ${GAME_LOOP_INTERVAL_MS / 1000}s linear`;
+
 
     // Lyt efter 'game_state' events fra serveren
     socket.on('game_state', (data) => {
@@ -30,51 +48,36 @@ document.addEventListener('DOMContentLoaded', () => {
         // Opdater score
         scoreDisplay.textContent = data.score;
 
-        // Vis/skjul game over besked
+        // Vis/skjul game over besked (nu centreret i spilbrættet)
         if (data.game_over) {
             gameOverMessage.classList.remove('hidden');
-            startButton.textContent = 'Restart Game';
-            startButton.classList.remove('hidden');
         } else {
             gameOverMessage.classList.add('hidden');
         }
 
-        // Skjul startknappen hvis spillet er startet og ikke game over
-        if (data.game_started && !data.game_over) {
-            startButton.classList.add('hidden');
+        // === STARTKNAP LOGIK ER FJERNET HERFRA ===
+        // Da startknappen er fjernet fra HTML, er denne logik ikke længere nødvendig.
+
+        // Slå transitions fra/til baseret på spillets tilstand for at undgå ujævn animation
+        if (data.game_over || !data.ball_moving) {
+            ball.style.transition = 'none'; // Ingen transition når spillet er over eller bolden står stille
+            playerPaddle.style.transition = 'none';
+        } else {
+            // Aktiver transitions, når spillet er i gang og bolden bevæger sig
+            ball.style.transition = ballTransitionStyle;
+            playerPaddle.style.transition = paddleTransitionStyle;
         }
     });
 
-    // Lyt efter tastetryk for at flytte paddle
+    // Lyt efter tastetryk for at flytte paddle eller starte spillet
     document.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowLeft' || e.key === 'a') {
             socket.emit('move_paddle', { direction: 'left' });
         } else if (e.key === 'ArrowRight' || e.key === 'd') {
             socket.emit('move_paddle', { direction: 'right' });
-        } else if (e.key === ' ' && gameOverMessage.classList.contains('hidden') === false) {
-             // Tryk på SPACE når spillet er slut for at starte igen
+        } else if (e.key === ' ') { // Spacebar er nu den eneste måde at starte/genstarte på
             socket.emit('start_game');
         }
     });
-
-    // Lyt efter klik på startknappen
-    startButton.addEventListener('click', () => {
-        socket.emit('start_game');
-    });
-
-    // Sæt initial størrelse på bolden (passer til BALL_RADIUS)
-    const BALL_RADIUS = 10; // Match BALL_RADIUS i Python
-    ball.style.width = `${BALL_RADIUS * 2}px`;
-    ball.style.height = `${BALL_RADIUS * 2}px`;
-
-    // Sæt initial størrelse og position på paddle
-    const PADDLE_WIDTH = 100; // Match PADDLE_WIDTH i Python
-    playerPaddle.style.width = `${PADDLE_WIDTH}px`;
-    playerPaddle.style.height = `${PADDLE_HEIGHT}px`;
-    playerPaddle.style.bottom = '0px'; // Altid i bunden
-
-    // Sæt størrelsen på game-board baseret på Flask variabler
-    gameBoard.style.width = `${GAME_WIDTH}px`;
-    gameBoard.style.height = `${GAME_HEIGHT}px`;
 
 });
