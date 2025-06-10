@@ -138,3 +138,17 @@ h1 {
 .hidden {
     display: none;
 }
+
+.brick {
+    position: absolute;
+    background-color: #db3c34; /* Blå for standard bricks */
+    border: 1px solid #910606;
+    box-sizing: border-box;
+    border-radius: 4px;
+    z-index: 5;
+}
+
+.brick.unbreakable {
+    background-color: #2c3e50; /* Mørk for unbreakable bricks */
+    border: 1px solid #1a252f;
+}
