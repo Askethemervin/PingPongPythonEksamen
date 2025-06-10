@@ -1,9 +1,9 @@
+import eventlet
+eventlet.monkey_patch()
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 import time
 import threading
-import eventlet
-eventlet.monkey_patch()
 import random
 
 app = Flask(__name__)
@@ -51,25 +51,25 @@ class Game:
         return [
             self.generate_brick_grid(
                 rows=4, cols=13,
-                start_x=0, start_y=50,
+                start_x=0, start_y=0,
                 brick_width=60,
                 brick_height=20,
                 spacing_x=1,
-                spacing_y=5,
+                spacing_y=1,
                 pattern_fn=lambda r, c: not (r == 0 and c % 3 == 0)
             ),
             self.generate_brick_grid(
                 rows=6, cols=12,
-                start_x=30, start_y=40,
+                start_x=0, start_y=0,
                 brick_width=50, brick_height=20,
-                spacing_x=4, spacing_y=4,
+                spacing_x=1, spacing_y=1,
                 pattern_fn=lambda r, c: (r + c) % 4 != 0
             ),
             self.generate_brick_grid(
                 rows=3, cols=8,
-                start_x=100, start_y=70,
+                start_x=0, start_y=0,
                 brick_width=70, brick_height=25,
-                spacing_x=6, spacing_y=6,
+                spacing_x=1, spacing_y=1,
                 pattern_fn=lambda r, c: True
             )
         ]
@@ -84,19 +84,28 @@ class Game:
 
         self.score = 0
         self.game_over = False
-        self.game_started = False # Ny flag for at styre start
+        self.game_started = False
+
         difficulty = self.level_index
+
+        cols = 14
+        spacing_x = 1
+        start_x = 1
+        brick_width = int((GAME_WIDTH - start_x - spacing_x * (cols - 1)) / cols)
+
         self.bricks = self.generate_brick_grid(
-            rows=5,
-            cols=13,
-            start_x=0,
-            start_y=50,
-            brick_width=60,
+            rows=6,
+            cols=cols,
+            start_x=start_x,
+            start_y=0,
+            brick_width=brick_width,
             brick_height=20,
-            spacing_x=1,
-            spacing_y=5,
+            spacing_x=spacing_x,
+            spacing_y=1,
             pattern_fn=lambda r, c: self.random_brick_pattern(r, c, difficulty)
         )
+
+
 
     def get_game_state(self):
         return {
@@ -118,63 +127,92 @@ class Game:
             self.ball_y = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS - 1
             return
 
-        # Flyt bolden
-        self.ball_x += self.ball_dx
-        self.ball_y += self.ball_dy
+        self.move_ball_with_collisions()
 
-        # Kollision med vægge (venstre/højre)
-        if self.ball_x - BALL_RADIUS < 0:
-            self.ball_x = BALL_RADIUS
-            self.ball_dx *= -1
-        elif self.ball_x + BALL_RADIUS > GAME_WIDTH:
-            self.ball_x = GAME_WIDTH - BALL_RADIUS
-            self.ball_dx *= -1
-
-        # Kollision med topvæggen
-        if self.ball_y - BALL_RADIUS < 0:
-            self.ball_y = BALL_RADIUS
-            self.ball_dy *= -1
-
-        # Kollision med spillerens paddle
-        if (self.ball_y + BALL_RADIUS >= GAME_HEIGHT - PADDLE_HEIGHT and
-            self.ball_y + BALL_RADIUS < GAME_HEIGHT - PADDLE_HEIGHT + abs(self.ball_dy)
-            ):
-            if (self.ball_x + BALL_RADIUS > self.player_paddle_x and
-                self.ball_x - BALL_RADIUS < self.player_paddle_x + PADDLE_WIDTH):
-                self.ball_dy *= -1
-                self.score += 1
-                self.ball_y = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS
-
-        # Bolden passerer forbi paddle'en (Game Over)
-        if self.ball_y + BALL_RADIUS > GAME_HEIGHT:
-            self.game_over = True
-            self.game_started = False # Spillet stopper
-
-        remaining_bricks = []
-        for brick in self.bricks:
-            if self.check_collision_with_brick(brick):
-                if brick['breakable']:
-                    self.score += 5
-                else:
-                    remaining_bricks.append(brick)
-                self.ball_dy *= -1
-            else:
-                remaining_bricks.append(brick)
-
-        self.bricks = remaining_bricks
-            
         if all(not b['breakable'] for b in self.bricks):
             self.level_index = (self.level_index + 1) % len(self.levels)
             self.reset_game()
+
+    def move_ball_with_collisions(self):
+        steps = int(max(abs(self.ball_dx), abs(self.ball_dy)))
+        dx_step = self.ball_dx / steps
+        dy_step = self.ball_dy / steps
+
+        for _ in range(steps):
+            self.ball_x += dx_step
+            self.ball_y += dy_step
+
+            if self.ball_x - BALL_RADIUS < 0:
+                self.ball_x = BALL_RADIUS
+                self.ball_dx *= -1
+                break
+            elif self.ball_x + BALL_RADIUS > GAME_WIDTH:
+                self.ball_x = GAME_WIDTH - BALL_RADIUS
+                self.ball_dx *= -1
+                break
+
+            if self.ball_y - BALL_RADIUS < 0:
+                self.ball_y = BALL_RADIUS
+                self.ball_dy *= -1
+                break
+
+            if (self.ball_y + BALL_RADIUS >= GAME_HEIGHT - PADDLE_HEIGHT and
+                self.ball_y + BALL_RADIUS < GAME_HEIGHT - PADDLE_HEIGHT + abs(dy_step)):
+                if (self.ball_x + BALL_RADIUS > self.player_paddle_x and
+                    self.ball_x - BALL_RADIUS < self.player_paddle_x + PADDLE_WIDTH):
+                    self.ball_dy *= -1
+                    self.ball_y = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS
+                    self.score += 1
+                    break
+
+            new_bricks = []
+            collision_happened = False
+            for brick in self.bricks:
+                if not collision_happened and self.check_collision_with_brick(brick):
+                    if brick['breakable']:
+                        self.score += 5
+                        # Ikke tilføj brick = fjern den
+                    else:
+                        new_bricks.append(brick)
+
+                    ball_center_x = self.ball_x
+                    ball_center_y = self.ball_y
+                    brick_center_x = brick['x'] + brick['width'] / 2
+                    brick_center_y = brick['y'] + brick['height'] / 2
+
+                    dx = abs(ball_center_x - brick_center_x)
+                    dy = abs(ball_center_y - brick_center_y)
+
+                    if dx > dy:
+                        self.ball_dx *= -1
+                    else:
+                        self.ball_dy *= -1
+
+                    collision_happened = True
+                else:
+                    new_bricks.append(brick)  # Behold resten
+
+            self.bricks = new_bricks
+            if collision_happened:
+                break
+
         
     def check_collision_with_brick(self, brick):
-        bx, by = self.ball_x, self.ball_y
-        r = BALL_RADIUS
+        ball_left = self.ball_x - BALL_RADIUS
+        ball_right = self.ball_x + BALL_RADIUS
+        ball_top = self.ball_y - BALL_RADIUS
+        ball_bottom = self.ball_y + BALL_RADIUS
+
+        brick_left = brick['x']
+        brick_right = brick['x'] + brick['width']
+        brick_top = brick['y']
+        brick_bottom = brick['y'] + brick['height']
+
         return (
-            bx + r > brick['x'] and
-            bx - r < brick['x'] + brick['width'] and
-            by + r > brick['y'] and
-            by - r < brick['y'] + brick['height']
+            ball_right > brick_left and
+            ball_left < brick_right and
+            ball_bottom > brick_top and
+            ball_top < brick_bottom
         )
 
     def move_paddle(self, direction):
@@ -245,8 +283,8 @@ def handle_start_game():
         
         game.game_started = True
         game.ball_moving = True
-        game.ball_dx = 5 if game.ball_x < GAME_WIDTH // 2 else -5
-        game.ball_dy = -5
+        game.ball_dx = 3 if game.ball_x < GAME_WIDTH // 2 else -3
+        game.ball_dy = -3
 
         game.start_game_loop()
         emit('game_state', game.get_game_state())

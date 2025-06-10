@@ -80,11 +80,13 @@ document.addEventListener('DOMContentLoaded', () => {
             brickElem = document.createElement('div');
             brickElem.id = id;
             brickElem.classList.add('brick');
-            if (!brick.breakable) {
-                brickElem.classList.add('unbreakable');
-            }
+            
             gameBoard.appendChild(brickElem);
             existingBricks.set(id, brickElem);
+        }
+        brickElem.classList.remove('unbreakable'); 
+        if (!brick.breakable) {
+            brickElem.classList.add('unbreakable');
         }
 
         brickElem.style.left = `${brick.x}px`;
