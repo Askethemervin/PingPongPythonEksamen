@@ -1,35 +1,41 @@
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Arial', sans-serif; /* Standard font, eller vælg en mere retro font */
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 100vh;
     width: 100vw;
-    background-color: #222;
-    color: #eee;
+    background-color: #A7D9F5; /* Lysere blå baggrund, inspireret af Bubble Shooter himmel */
+    color: #333; /* Mørk tekst for kontrast */
     margin: 0;
     padding: 0;
     overflow: hidden;
+    /* Tilføj en subtil skygge til hele siden, hvis ønsket */
+    /* box-shadow: inset 0 0 50px rgba(0,0,0,0.1); */
 }
 
 h1 {
-    margin-bottom: 20px;
-    color: #0f0;
+    margin-bottom: 25px; /* Lidt mere plads */
+    color: #1E6091; /* En mørkere, dæmpet blå */
+    text-shadow: 2px 2px 3px rgba(0,0,0,0.2); /* Lidt skygge for dybde */
+    font-size: 2.8em; /* Gør titlen lidt større */
 }
 
 #main-content-wrapper {
     display: flex;
     flex-direction: row;
     align-items: flex-start;
-    gap: 30px;
+    gap: 40px; /* Lidt mere mellemrum mellem spil og info */
 }
 
 #game-container {
-    border: 5px solid #0f0;
-    background-color: #000;
+    border: 5px solid #6BAEDC; /* Mellemblå ramme */
+    background-color: #E6F3FB; /* Meget lys blå/off-white indeni */
     position: relative;
     overflow: hidden;
+    border-radius: 15px; /* Afrundede hjørner til spilbrættet */
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.3); /* Subtil skygge for 3D-effekt */
 }
 
 #game-board {
@@ -42,17 +48,47 @@ h1 {
     position: absolute;
     width: 20px;
     height: 20px;
-    background-color: white;
-    border-radius: 50%;
+    background-color: #FFEA00; /* Gul farve for bolden (ligesom på billedet) */
+    border-radius: 50%; /* Stadig rund bold */
+    border: none; /* Fjern kant for at få glød-effekten tydeligere frem */
+    /* Ny box-shadow for glød og dybde */
+    box-shadow:
+        0 0 10px 5px rgba(255, 234, 0, 0.7), /* Kraftigere glød (gul) */
+        0 0 20px 10px rgba(255, 234, 0, 0.5), /* Endnu bredere, blødere glød */
+        0 0 0 2px #FFFFFF; /* En lille hvid indre glød/kant */
     transition: left 0.016s linear, top 0.016s linear;
+}
+
+/* === NY CSS TIL BOLDSPOR (BALL TRAIL) === */
+.ball-trail {
+    position: absolute;
+    /* baggrundsfarve skal være mørkere end bolden, men stadig passe til temaet */
+    /* FJERN ALPHA-KANALEN fra rgba() for at gøre farven SOLID */
+    background-color: rgb(2, 13, 20); /* En mørk, solid blå */
+
+    /* Sæt den indledende opacitet her. Denne er den der vises FØR transitionen starter. */
+    /* Prøv 0.9, 0.8, 0.7 - højere tal er mørkere / mere synlige */
+    opacity: 0.8; /* Start med 80% synlighed (juster efter behov) */
+
+    border-radius: 50%;
+    /* Brug transition til at få den til at fade ud */
+    transition: opacity 0.5s linear, transform 0.5s linear, width 0.5s linear, height 0.5s linear;
+    pointer-events: none;
+    z-index: 5;
 }
 
 #player-paddle {
     position: absolute;
     width: 100px;
     height: 15px;
-    background-color: white;
-    bottom: 0;
+    background-color: #00FF00; /* Grøn farve for paddlen (kan ændres til rød/blå/pink) */
+    /* Juster border-radius for at få en "pille"-form. Skal være halvdelen af højden. */
+    border-radius: 7.5px; /* PADDLE_HEIGHT / 2 = 15px / 2 = 7.5px */
+    border: none; /* Fjern kant for at få glød-effekten tydeligere frem */
+    /* Ny box-shadow for glød */
+    box-shadow:
+        0 0 10px 5px rgba(0, 255, 0, 0.7), /* Kraftigere glød (grøn) */
+        0 0 20px 10px rgba(0, 255, 0, 0.5); /* Endnu bredere, blødere glød */
     transition: left 0.016s linear;
 }
 
@@ -61,12 +97,13 @@ h1 {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    color: red;
+    color: #1E6091; /* Den samme mørkere blå farve som h1 */
     font-weight: bold;
-    font-size: 1.5em;
+    font-size: 1.8em;
     text-align: center;
     width: 100%;
     z-index: 10;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3); /* Bevar skyggen for læsbarhed */
 }
 
 #game-info {
@@ -77,38 +114,27 @@ h1 {
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding: 10px;
-    border: 1px solid #0a0;
-    border-radius: 5px;
-    background-color: #1a1a1a;
+    padding: 15px; /* Lidt mere padding */
+    border: 3px solid #6BAEDC; /* Samme ramme som spilbrættet */
+    border-radius: 15px; /* Afrundede hjørner */
+    background-color: #E6F3FB; /* Samme baggrund som spilbrættet */
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.3); /* Samme skygge */
+    min-width: 150px;
 }
+
+#game-info p {
+    color: #1E6091; /* Mørkere blå tekst for score */
+    margin-bottom: 10px; /* Lidt plads under scoren */
+    font-weight: bold;
+}
+
+#game-info span#score {
+    font-size: 1.4em; /* Gør selve scoretallet større */
+    color: #FF6F61; /* En kontrastfarve for score, f.eks. orange-rød */
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+}
+
 
 .hidden {
     display: none;
-}
-
-#start-button {
-    padding: 10px 20px;
-    font-size: 1.2em;
-    background-color: #0f0;
-    color: black;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    margin-top: 15px;
-}
-
-#start-button:hover {
-    background-color: #0a0;
-}
-.brick {
-    position: absolute;
-    background-color: #0ff;
-    border: 2px solid #088;
-    box-sizing: border-box;
-}
-
-.unbreakable {
-    background-color: #888;
-    border: 2px solid #555;
 }

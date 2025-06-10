@@ -17,6 +17,7 @@ PADDLE_WIDTH = 100
 PADDLE_HEIGHT = 15
 BALL_RADIUS = 10
 GAME_LOOP_INTERVAL_MS = 16 # Ca. 60 FPS (1000ms / 60)
+BALL_SPEED_BASE = 5 # Ny konstant for boldens grundhastighed
 
 # --- Spillets tilstand ---
 class Game:
@@ -115,7 +116,7 @@ class Game:
             'score': self.score,
             'game_over': self.game_over,
             'game_started': self.game_started,
-            'bricks': self.bricks
+            'bricks': self.bricks # Sender murstenene til klienten
         }
 
     def update_game_state(self):
@@ -156,6 +157,77 @@ class Game:
                 self.ball_dy *= -1
                 break
 
+        # Kollision med spillerens paddle
+        # Sørg for at bolden er på vej ned og rammer paddlens Y-niveau
+        if (self.ball_dy > 0 and # Bolden skal bevæge sig nedad
+            self.ball_y + BALL_RADIUS >= GAME_HEIGHT - PADDLE_HEIGHT and
+            self.ball_y + BALL_RADIUS <= GAME_HEIGHT - PADDLE_HEIGHT + abs(self.ball_dy) # Fang kollision præcist
+            ):
+            # Check om boldens x-position er inden for paddle's x-område
+            if (self.ball_x + BALL_RADIUS > self.player_paddle_x and
+                self.ball_x - BALL_RADIUS < self.player_paddle_x + PADDLE_WIDTH):
+                
+                # Sæt bolden lige over paddlen for at undgå at den sætter sig fast
+                self.ball_y = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS
+
+                # === NY LOGIK FOR BOLD AFBØJNING FRA PADDLE ===
+                # Beregn boldens midtpunkt relativt til paddlen
+                # 0 er paddlens venstre kant, PADDLE_WIDTH er paddlens højre kant
+                # Boldens x er dens midte, så vi trækker BALL_RADIUS fra for at få dens venstre kant for bedre præcision
+                # Men for 'relative_impact_x' er det bedre at bruge boldens midte i forhold til paddlens midte
+                
+                # Center af bolden i forhold til center af paddlen
+                ball_center_x_on_paddle = self.ball_x - self.player_paddle_x - (PADDLE_WIDTH / 2)
+
+                # Normaliser impaktpunktet til en værdi mellem -1 (venstre kant) og 1 (højre kant)
+                # Max afbøjning ved kanten af paddlen
+                normalized_impact = (ball_center_x_on_paddle / (PADDLE_WIDTH / 2))
+
+                # Juster boldens X-hastighed baseret på impaktpunktet
+                # Spredningsfaktor kontrollerer hvor meget bolden spredes
+                # Jeg har justeret denne lidt for at give en mere intuitiv afbøjning
+                deflection_factor = 3.0 # Højere tal = mere afbøjning
+
+                # Sæt den nye ball_dx. Sørg for en minimum X-hastighed, selv ved ram af midten.
+                # Og at den samlede hastighed (vektorlængden af dx og dy) bevares eller øges en smule.
+                self.ball_dx = normalized_impact * deflection_factor
+
+                # Sørg for, at bolden altid har en vis hastighed i x-retningen, så den ikke går lige op/ned
+                # hvis den rammer præcist midten.
+                if abs(self.ball_dx) < 1: # Hvis x-hastigheden er meget lav, giv den et lille skub
+                    self.ball_dx = 1 if normalized_impact >= 0 else -1
+                
+                # Vend Y-hastighed
+                self.ball_dy *= -1 
+
+                self.score += 1
+                # === SLUT NY LOGIK ===
+
+        # Bolden passerer forbi paddle'en (Game Over)
+        if self.ball_y + BALL_RADIUS > GAME_HEIGHT:
+            self.game_over = True
+            self.game_started = False
+            self.ball_moving = False
+
+        remaining_bricks = []
+        for brick in self.bricks:
+            # Check for collision with brick (using the ball's current position)
+            if (self.ball_x + BALL_RADIUS > brick['x'] and
+                self.ball_x - BALL_RADIUS < brick['x'] + brick['width'] and
+                self.ball_y + BALL_RADIUS > brick['y'] and
+                self.ball_y - BALL_RADIUS < brick['y'] + brick['height']):
+                
+                # Collision detected with a brick
+                # Determine which side of the brick was hit to decide ball_dx or ball_dy
+                # A more advanced collision detection would check entry point and normal vector
+                # For simplicity, we'll just reverse dy, but consider improving this later
+                
+                # Basic collision response: reverse vertical direction
+                self.ball_dy *= -1 
+                
+                # Check if it's breakable
+                if brick['breakable']:
+                    self.score += 5
             if (self.ball_y + BALL_RADIUS >= GAME_HEIGHT - PADDLE_HEIGHT and
                 self.ball_y + BALL_RADIUS < GAME_HEIGHT - PADDLE_HEIGHT + abs(dy_step)):
                 if (self.ball_x + BALL_RADIUS > self.player_paddle_x and
@@ -192,12 +264,44 @@ class Game:
                 else:
                     new_bricks.append(brick)  # Behold resten
 
+        self.bricks = remaining_bricks
+            
+        # Tjek for level complete (alle breakable bricks er fjernet)
+        if all(not b['breakable'] for b in self.bricks):
+            self.level_index = (self.level_index + 1) % len(self.levels)
+            self.reset_game()
+            self.game_started = False # Stop spillet midlertidigt for at vise "Press space to start"
+            self.ball_moving = False
+
+
             self.bricks = new_bricks
             if collision_happened:
                 break
 
         
     def check_collision_with_brick(self, brick):
+        # Dette er en AABB (Axis-Aligned Bounding Box) kollisionstjek for cirkel mod rektangel.
+        # Det er en forenklet metode. Bolden kan sidde fast eller springe mærkeligt ved hjørner.
+        # For avanceret kollision: Find nærmeste punkt på mursten til boldens midte.
+        
+        # Midtpunkt af bolden
+        ball_center_x = self.ball_x
+        ball_center_y = self.ball_y
+        ball_radius = BALL_RADIUS
+
+        # Nærmeste punkt på mursten til boldens midte
+        closest_x = max(brick['x'], min(ball_center_x, brick['x'] + brick['width']))
+        closest_y = max(brick['y'], min(ball_center_y, brick['y'] + brick['height']))
+
+        # Beregn afstand mellem boldens midte og nærmeste punkt
+        distance_x = ball_center_x - closest_x
+        distance_y = ball_center_y - closest_y
+        
+        distance_squared = (distance_x * distance_x) + (distance_y * distance_y)
+        
+        # Kollision, hvis afstanden er mindre end boldens radius
+        return distance_squared < (ball_radius * ball_radius)
+
         ball_left = self.ball_x - BALL_RADIUS
         ball_right = self.ball_x + BALL_RADIUS
         ball_top = self.ball_y - BALL_RADIUS
@@ -219,21 +323,20 @@ class Game:
         if self.game_over:
             return
 
-        # DEFINER EN PADLE_BEVÆGELSESHASTIGHED HER
-        PADDLE_MOVE_AMOUNT = 35 # Du kan justere denne værdi (f.eks. 30, 40, 50)
+        PADDLE_MOVE_AMOUNT = 20 
 
         if not self.ball_moving:
             if direction == 'left':
-                self.player_paddle_x = max(0, self.player_paddle_x - PADDLE_MOVE_AMOUNT) # <-- Ændret fra 20
+                self.player_paddle_x = max(0, self.player_paddle_x - PADDLE_MOVE_AMOUNT)
                 self.ball_x = self.player_paddle_x + (PADDLE_WIDTH // 2)
             elif direction == 'right':
-                self.player_paddle_x = min(GAME_WIDTH - PADDLE_WIDTH, self.player_paddle_x + PADDLE_MOVE_AMOUNT) # <-- Ændret fra 20
+                self.player_paddle_x = min(GAME_WIDTH - PADDLE_WIDTH, self.player_paddle_x + PADDLE_MOVE_AMOUNT)
                 self.ball_x = self.player_paddle_x + (PADDLE_WIDTH // 2)
         else:
             if direction == 'left':
-                self.player_paddle_x = max(0, self.player_paddle_x - PADDLE_MOVE_AMOUNT) # <-- Ændret fra 20
+                self.player_paddle_x = max(0, self.player_paddle_x - PADDLE_MOVE_AMOUNT)
             elif direction == 'right':
-                self.player_paddle_x = min(GAME_WIDTH - PADDLE_WIDTH, self.player_paddle_x + PADDLE_MOVE_AMOUNT) # <-- Ændret fra 20
+                self.player_paddle_x = min(GAME_WIDTH - PADDLE_WIDTH, self.player_paddle_x + PADDLE_MOVE_AMOUNT)
 
     def start_game_loop(self):
         if self._game_loop_thread is None or not self._game_loop_thread.is_alive():
@@ -290,4 +393,4 @@ def handle_start_game():
         emit('game_state', game.get_game_state())
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True, port=5000)
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True, port=5000, use_reloader=False)

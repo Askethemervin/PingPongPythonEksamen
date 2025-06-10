@@ -7,14 +7,14 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <h1>Flask Pong</h1>
+    <h1>Pong Game</h1>
 
     <div id="main-content-wrapper">
         <div id="game-container">
             <div id="game-board" style="width: {{ game_width }}px; height: {{ game_height }}px;">
                 <div id="ball"></div>
                 <div id="player-paddle"></div>
-                <p id="game-over-message" class="hidden">Game Over! Press SPACE to restart.</p>
+                <p id="game-over-message">Press SPACE to start</p>
             </div>
         </div>
 
