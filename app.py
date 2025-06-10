@@ -1,9 +1,10 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 import time
 import threading
-import eventlet
-eventlet.monkey_patch()
 import random
 
 app = Flask(__name__)
@@ -252,4 +253,4 @@ def handle_start_game():
         emit('game_state', game.get_game_state())
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True, port=5000)
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True, port=5000, use_reloader=False)
