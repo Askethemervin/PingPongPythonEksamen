@@ -48,22 +48,47 @@ h1 {
     position: absolute;
     width: 20px;
     height: 20px;
-    background-color: #FFFFFF; /* Hvid bold */
-    border-radius: 50%; /* Rund bold */
-    border: 2px solid #6BAEDC; /* En lille blå kant rundt om bolden */
-    box-shadow: 0 0 8px rgba(255,255,255,0.7); /* Lidt glød/skygge */
+    background-color: #FFEA00; /* Gul farve for bolden (ligesom på billedet) */
+    border-radius: 50%; /* Stadig rund bold */
+    border: none; /* Fjern kant for at få glød-effekten tydeligere frem */
+    /* Ny box-shadow for glød og dybde */
+    box-shadow:
+        0 0 10px 5px rgba(255, 234, 0, 0.7), /* Kraftigere glød (gul) */
+        0 0 20px 10px rgba(255, 234, 0, 0.5), /* Endnu bredere, blødere glød */
+        0 0 0 2px #FFFFFF; /* En lille hvid indre glød/kant */
     transition: left 0.016s linear, top 0.016s linear;
+}
+
+/* === NY CSS TIL BOLDSPOR (BALL TRAIL) === */
+.ball-trail {
+    position: absolute;
+    /* baggrundsfarve skal være mørkere end bolden, men stadig passe til temaet */
+    /* FJERN ALPHA-KANALEN fra rgba() for at gøre farven SOLID */
+    background-color: rgb(2, 13, 20); /* En mørk, solid blå */
+
+    /* Sæt den indledende opacitet her. Denne er den der vises FØR transitionen starter. */
+    /* Prøv 0.9, 0.8, 0.7 - højere tal er mørkere / mere synlige */
+    opacity: 0.8; /* Start med 80% synlighed (juster efter behov) */
+
+    border-radius: 50%;
+    /* Brug transition til at få den til at fade ud */
+    transition: opacity 0.5s linear, transform 0.5s linear, width 0.5s linear, height 0.5s linear;
+    pointer-events: none;
+    z-index: 5;
 }
 
 #player-paddle {
     position: absolute;
     width: 100px;
     height: 15px;
-    background-color: #8C8C8C; /* Mellemgrå paddle */
-    bottom: 0;
-    border-radius: 8px; /* Afrundede hjørner til paddlen */
-    border: 2px solid #555; /* Mørkere grå kant */
-    box-shadow: 3px 3px 10px rgba(0,0,0,0.4); /* Skygge for dybde */
+    background-color: #00FF00; /* Grøn farve for paddlen (kan ændres til rød/blå/pink) */
+    /* Juster border-radius for at få en "pille"-form. Skal være halvdelen af højden. */
+    border-radius: 7.5px; /* PADDLE_HEIGHT / 2 = 15px / 2 = 7.5px */
+    border: none; /* Fjern kant for at få glød-effekten tydeligere frem */
+    /* Ny box-shadow for glød */
+    box-shadow:
+        0 0 10px 5px rgba(0, 255, 0, 0.7), /* Kraftigere glød (grøn) */
+        0 0 20px 10px rgba(0, 255, 0, 0.5); /* Endnu bredere, blødere glød */
     transition: left 0.016s linear;
 }
 
@@ -72,13 +97,13 @@ h1 {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    color: #C70039; /* En dybere rød for kontrast på den lyse baggrund */
+    color: #1E6091; /* Den samme mørkere blå farve som h1 */
     font-weight: bold;
-    font-size: 1.8em; /* Gør teksten lidt større */
+    font-size: 1.8em;
     text-align: center;
     width: 100%;
     z-index: 10;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.3); /* Lidt skygge på teksten */
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3); /* Bevar skyggen for læsbarhed */
 }
 
 #game-info {

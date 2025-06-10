@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     ball.style.width = `${BALL_RADIUS * 2}px`;
     ball.style.height = `${BALL_RADIUS * 2}px`;
+    // Initial z-index for bolden, så den er over sporet
+    ball.style.zIndex = '10';
 
     playerPaddle.style.width = `${PADDLE_WIDTH}px`;
     playerPaddle.style.height = `${PADDLE_HEIGHT}px`;
@@ -27,7 +29,54 @@ document.addEventListener('DOMContentLoaded', () => {
     const ballTransitionStyle = `left ${GAME_LOOP_INTERVAL_MS / 1000}s linear, top ${GAME_LOOP_INTERVAL_MS / 1000}s linear`;
     const paddleTransitionStyle = `left ${GAME_LOOP_INTERVAL_MS / 1000}s linear`;
 
+    let keysPressed = {};
+    let paddleMoveInterval = null;
+
+    // === NY KODE FOR BOLDSPOR (BALL TRAIL) ===
+    const MAX_TRAIL_ELEMENTS = 10; // Antal spor-elementer
+    const trailElements = []; // Array til at holde styr på spor-elementerne
+
+    // Funktion til at oprette et nyt spor-element
+  function createTrailElement(x, y, radius) {
+        const trail = document.createElement('div');
+        trail.classList.add('ball-trail');
+        trail.style.width = `${radius * 2}px`;
+        trail.style.height = `${radius * 2}px`;
+        trail.style.left = `${x - radius}px`;
+        trail.style.top = `${y - radius}px`;
+        gameBoard.appendChild(trail);
+
+        trailElements.push(trail);
+        if (trailElements.length > MAX_TRAIL_ELEMENTS) {
+            const oldTrail = trailElements.shift();
+            oldTrail.remove();
+        }
+
+        // Ingen indledende opacity sætning i JS her, da det er defineret i CSS
+        // og vi vil have det til at starte med 1 (eller den farve, du vælger i CSS)
+        // og så lade transitionen styre fade-out.
+
+        requestAnimationFrame(() => {
+            // Nu skal opacity bare falme ud fra sin startværdi (som er 1 fra CSS)
+            trail.style.opacity = 0; // Sæt opaciteten til 0 for at starte transitionen (fade out)
+            trail.style.transform = 'scale(0.8)';
+            setTimeout(() => {
+                if (trail.parentNode) {
+                    trail.remove();
+                }
+            }, 500);
+        });
+    }
+    // === SLUT NY KODE TIL BOLDSPOR ===
+
     socket.on('game_state', (data) => {
+        // === NY KODE TIL AT GENERERE SPOR ===
+        // Opret et spor-element hvis bolden bevæger sig, og kun hver anden frame
+        if (data.ball_moving && data.score % 2 === 0) { // Bruger score som en simpel hack til at begrænse, kan også bruge en tæller
+            createTrailElement(data.ball_x, data.ball_y, BALL_RADIUS);
+        }
+        // === SLUT NY KODE TIL AT GENERERE SPOR ===
+
         ball.style.left = `${data.ball_x - (ball.offsetWidth / 2)}px`;
         ball.style.top = `${data.ball_y - (ball.offsetHeight / 2)}px`;
         playerPaddle.style.left = `${data.player_paddle_x}px`;
@@ -35,6 +84,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (data.game_over) {
             gameOverMessage.classList.remove('hidden');
+            gameOverMessage.textContent = 'Game Over! Press SPACE to restart.';
+        } else if (!data.game_started) {
+            gameOverMessage.classList.remove('hidden');
+            gameOverMessage.textContent = 'Press SPACE to start';
         } else {
             gameOverMessage.classList.add('hidden');
         }
@@ -42,57 +95,52 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.game_over || !data.ball_moving) {
             ball.style.transition = 'none';
             playerPaddle.style.transition = 'none';
+            // === NY KODE: RYDD OP I SPOR VED SPILLETS SLUT ===
+            trailElements.forEach(trail => trail.remove());
+            trailElements.length = 0; // Tøm arrayet
+            // === SLUT NY KODE ===
         } else {
             ball.style.transition = ballTransitionStyle;
             playerPaddle.style.transition = paddleTransitionStyle;
         }
     });
 
-    // === NY KODE FOR BEDRE LONG-PRESS RESPONSIVITET ===
-    let keysPressed = {}; // Objekt til at holde styr på, hvilke taster der er nede
-    let paddleMoveInterval = null; // Til at gemme interval ID'et
-
     document.addEventListener('keydown', (e) => {
-        // Forhindrer browser scrolling ved piletaster
         if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === ' ' || e.key === 'a' || e.key === 'd') {
             e.preventDefault();
         }
 
-        // Tjek om tasten allerede er registreret som nede for at undgå gentagne keydown events fra OS'et
         if (keysPressed[e.key]) {
-            return; // Tast er allerede nede, ignorer
+            return;
         }
-        keysPressed[e.key] = true; // Marker tasten som nede
+        keysPressed[e.key] = true;
 
-        // Start eller genstart spillet med SPACE
         if (e.key === ' ') {
             socket.emit('start_game');
         }
 
-        // Hvis en bevægelsestast er nede, start interval for at sende events
         if (e.key === 'ArrowLeft' || e.key === 'a') {
-            if (!paddleMoveInterval) { // Kun start interval hvis det ikke allerede kører
+            if (!paddleMoveInterval) {
                 paddleMoveInterval = setInterval(() => {
-                    if (keysPressed['ArrowLeft'] || keysPressed['a']) { // Tjek om tast stadig er nede
+                    if (keysPressed['ArrowLeft'] || keysPressed['a']) {
                         socket.emit('move_paddle', { direction: 'left' });
                     }
-                }, 50); // Send 'move_paddle' event hvert 50ms (kan justeres)
+                }, 50);
             }
         } else if (e.key === 'ArrowRight' || e.key === 'd') {
-            if (!paddleMoveInterval) { // Kun start interval hvis det ikke allerede kører
+            if (!paddleMoveInterval) {
                 paddleMoveInterval = setInterval(() => {
-                    if (keysPressed['ArrowRight'] || keysPressed['d']) { // Tjek om tast stadig er nede
+                    if (keysPressed['ArrowRight'] || keysPressed['d']) {
                         socket.emit('move_paddle', { direction: 'right' });
                     }
-                }, 50); // Send 'move_paddle' event hvert 50ms (kan justeres)
+                }, 50);
             }
         }
     });
 
     document.addEventListener('keyup', (e) => {
-        keysPressed[e.key] = false; // Marker tasten som oppe
+        keysPressed[e.key] = false;
 
-        // Hvis ingen bevægelsestaster er nede, stop intervallet
         if (!(keysPressed['ArrowLeft'] || keysPressed['a'] || keysPressed['ArrowRight'] || keysPressed['d'])) {
             if (paddleMoveInterval) {
                 clearInterval(paddleMoveInterval);
