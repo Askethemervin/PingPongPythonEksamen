@@ -1,11 +1,13 @@
 import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 import time
 import threading
 import random
 
-eventlet.monkey_patch()
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key_here'

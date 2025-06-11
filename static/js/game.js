@@ -25,38 +25,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const ballTransitionStyle = `left ${GAME_LOOP_INTERVAL_MS / 1000}s linear, top ${GAME_LOOP_INTERVAL_MS / 1000}s linear`;
     const paddleTransitionStyle = `left ${GAME_LOOP_INTERVAL_MS / 1000}s linear`;
 
-    const MAX_TRAIL_ELEMENTS = 10;
-    const trailElements = [];
     const existingBricks = new Map();
     const brickIds = new Set();
     let keysPressed = {};
     let paddleMoveInterval = null;
 
-    function createTrailElement(x, y, radius) {
-        const trail = document.createElement('div');
-        trail.classList.add('ball-trail');
-        trail.style.width = `${radius * 2}px`;
-        trail.style.height = `${radius * 2}px`;
-        trail.style.left = `${x - radius}px`;
-        trail.style.top = `${y - radius}px`;
-        gameBoard.appendChild(trail);
-
-        trailElements.push(trail);
-        if (trailElements.length > MAX_TRAIL_ELEMENTS) {
-            trailElements.shift().remove();
-        }
-
-        requestAnimationFrame(() => {
-            trail.style.opacity = 0;
-            trail.style.transform = 'scale(0.8)';
-            setTimeout(() => trail.remove(), 500);
-        });
-    }
-
     socket.on('game_state', (data) => {
-        if (data.ball_moving && data.score % 2 === 0) {
-            createTrailElement(data.ball_x, data.ball_y, BALL_RADIUS);
-        }
 
         ball.style.left = `${data.ball_x - (ball.offsetWidth / 2)}px`;
         ball.style.top = `${data.ball_y - (ball.offsetHeight / 2)}px`;
@@ -76,8 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.game_over || !data.ball_moving) {
             ball.style.transition = 'none';
             playerPaddle.style.transition = 'none';
-            trailElements.forEach(trail => trail.remove());
-            trailElements.length = 0;
         } else {
             ball.style.transition = ballTransitionStyle;
             playerPaddle.style.transition = paddleTransitionStyle;
