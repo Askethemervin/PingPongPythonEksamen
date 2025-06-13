@@ -74,7 +74,9 @@ body {
     border: none;
     box-shadow: none;
     transition: left 0.016s linear;
+    bottom: 0px; /* Sørg for at paddlen er i bunden */
 }
+
 
 #game-over-message {
     position: absolute;
@@ -139,4 +141,24 @@ body {
     background-image: url('../images/grey-brick.png'); 
     filter: brightness(60%);
     border: none;
+}
+
+/* Power-up styles */
+.power-up {
+    position: absolute;
+    width: 30px; /* Use POWER_UP_RADIUS * 2 from app.py */
+    height: 30px; /* Use POWER_UP_RADIUS * 2 from app.py */
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    z-index: 8; /* Ensure it's above bricks but below ball/paddle */
+    transition: top 0.016s linear; /* Smooth falling animation */
+}
+
+.power-up.slow_ball {
+    background-image: url('../images/snail.png'); /* You'll need this image */
+}
+
+.power-up.enlarge_paddle {
+    background-image: url('../images/big-paddle.png'); /* You'll need this image */
 }
