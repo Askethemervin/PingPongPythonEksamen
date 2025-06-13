@@ -68,7 +68,7 @@ body {
 }
 
 .ball.multi { /* New: Class for multi-ball spawned balls */
-    background-image: url('../images/multi-ball-drop.png'); /* <-- YOUR NEW IMAGE HERE (e.g., a green drop.png) */
+    background-image: url('../images/drop.png'); /* <-- YOUR NEW IMAGE HERE (e.g., a green drop.png) */
 }
 
 #player-paddle {

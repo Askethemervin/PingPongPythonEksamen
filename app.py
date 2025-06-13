@@ -93,7 +93,7 @@ class Game:
         brick_width = int((GAME_WIDTH - start_x - spacing_x * (cols - 1)) / cols)
         self.bricks = self.generate_brick_grid(6, cols, start_x, 0, brick_width, 20, spacing_x, 1, lambda r, c: self.random_brick_pattern(r, c, difficulty))
 
-    def create_new_ball(self, x=None, y=None, dx=None, dy=None, ball_type='normal'): # <-- **THIS LINE IS CRITICAL**
+    def create_new_ball(self, x=None, y=None, dx=None, dy=None, ball_type='normal'):
         """Creates and adds a new ball to the game."""
         new_ball_x = x if x is not None else (self.player_paddle_x + (self.current_paddle_width // 2))
         new_ball_y = y if y is not None else (GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS - 1)
