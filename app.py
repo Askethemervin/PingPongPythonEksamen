@@ -28,6 +28,11 @@ PADDLE_ENLARGE_FACTOR = 1.5
 BALL_SLOW_DURATION_SECONDS = 10
 BALL_SLOW_FACTOR = 0.5
 
+# Debuff specific constants
+BALL_FAST_DURATION_SECONDS = 10
+BALL_FAST_FACTOR = 1.8 # Make the ball significantly faster
+MULTI_BALL_DURATION_SECONDS = 15 # How long the multi-ball effect lasts
+MULTI_BALL_COUNT = 2 # How many additional balls to spawn
 
 class Game:
     def __init__(self):
@@ -35,8 +40,8 @@ class Game:
         self.level_index = 0
         self.reset_game()
         self._game_loop_thread = None
-        self.power_ups = []
-        self.active_power_ups = {} # Track active power-ups and their end times
+        self.falling_items = [] # Renamed from power_ups to include debuffs
+        self.active_effects = {} # Renamed from active_power_ups to include all effects
 
     def generate_brick_grid(self, rows, cols, start_x, start_y, brick_width, brick_height, spacing_x, spacing_y, pattern_fn):
         bricks = []
@@ -67,18 +72,19 @@ class Game:
 
     def reset_game(self):
         self.player_paddle_x = (GAME_WIDTH - PADDLE_WIDTH) // 2
-        self.current_paddle_width = PADDLE_WIDTH # Track current paddle width
-        self.ball_x = self.player_paddle_x + (self.current_paddle_width // 2) # Use current paddle width
-        self.ball_y = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS - 1
-        self.ball_dx = 0
-        self.ball_dy = 0
-        self.current_ball_speed = BALL_SPEED_BASE # Track current ball speed
+        self.current_paddle_width = PADDLE_WIDTH 
+        
+        self.balls = [] 
+        self.create_new_ball(ball_type='normal') # Ensure initial ball is 'normal' type
+
+        self.current_ball_speed = BALL_SPEED_BASE 
         self.score = 0
         self.game_over = False
         self.game_started = False
-        self.ball_moving = False # New flag to control ball movement when game is not started
-        self.power_ups = [] # Clear power-ups on reset
-        self.active_power_ups = {} # Clear active power-ups
+        self.any_ball_moving = False 
+
+        self.falling_items = [] 
+        self.active_effects = {} 
 
         difficulty = self.level_index
         cols = 14
@@ -87,139 +93,171 @@ class Game:
         brick_width = int((GAME_WIDTH - start_x - spacing_x * (cols - 1)) / cols)
         self.bricks = self.generate_brick_grid(6, cols, start_x, 0, brick_width, 20, spacing_x, 1, lambda r, c: self.random_brick_pattern(r, c, difficulty))
 
+    def create_new_ball(self, x=None, y=None, dx=None, dy=None, ball_type='normal'): # <-- **THIS LINE IS CRITICAL**
+        """Creates and adds a new ball to the game."""
+        new_ball_x = x if x is not None else (self.player_paddle_x + (self.current_paddle_width // 2))
+        new_ball_y = y if y is not None else (GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS - 1)
+        new_ball_dx = dx if dx is not None else (random.choice([-1, 1]) * (BALL_SPEED_BASE // 2 + random.randint(0,2))) 
+        new_ball_dy = dy if dy is not None else -BALL_SPEED_BASE
+
+        self.balls.append({
+            'id': str(uuid.uuid4()), 
+            'x': new_ball_x,
+            'y': new_ball_y,
+            'dx': new_ball_dx,
+            'dy': new_ball_dy,
+            'is_moving': False,
+            'type': ball_type # Make sure this 'type' key is consistently set
+        })
+
     def get_game_state(self):
         return {
-            'ball_x': self.ball_x,
-            'ball_y': self.ball_y,
+            'balls': self.balls, 
             'player_paddle_x': self.player_paddle_x,
-            'player_paddle_width': self.current_paddle_width, # Send current paddle width
+            'player_paddle_width': self.current_paddle_width, 
             'score': self.score,
             'game_over': self.game_over,
             'game_started': self.game_started,
             'bricks': self.bricks,
-            'power_ups': self.power_ups # Include power-ups in game state
+            'falling_items': self.falling_items 
         }
 
     def update_game_state(self):
-        self.check_active_power_ups() # Check for expired power-ups
+        self.check_active_effects() 
 
         if self.game_over or not self.game_started:
             return
+        
+        if not self.any_ball_moving and self.game_started:
+            for ball in self.balls:
+                ball['x'] = self.player_paddle_x + (self.current_paddle_width // 2)
+                ball['y'] = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS - 1
+            return 
 
-        if not self.ball_moving:
-            self.ball_x = self.player_paddle_x + (self.current_paddle_width // 2)
-            self.ball_y = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS - 1
-            return
-
-        self.move_ball_with_collisions()
-        self.move_power_ups()
-        self.check_power_up_collisions()
+        self.move_balls_with_collisions() 
+        self.move_falling_items() 
+        self.check_falling_item_collisions()
 
         if all(not b['breakable'] for b in self.bricks):
             self.level_index = (self.level_index + 1) % len(self.levels)
             self.reset_game()
             self.game_started = False
-            self.ball_moving = False
+            self.any_ball_moving = False 
 
-    def move_ball_with_collisions(self):
-        # Calculate effective speed for step determination
-        effective_speed_x = abs(self.ball_dx) * self.current_ball_speed / BALL_SPEED_BASE
-        effective_speed_y = abs(self.ball_dy) * self.current_ball_speed / BALL_SPEED_BASE
-
-        # Determine number of steps based on the maximum component speed
-        steps = int(max(effective_speed_x, effective_speed_y)) + 1 
+    def move_balls_with_collisions(self): 
+        balls_to_keep = []
         
-        if steps == 0: 
-            return
+        for ball in list(self.balls): 
+            if not ball['is_moving']:
+                balls_to_keep.append(ball)
+                continue 
 
-        # Calculate step increments, scaled by current_ball_speed
-        dx_step = self.ball_dx / steps * (self.current_ball_speed / BALL_SPEED_BASE)
-        dy_step = self.ball_dy / steps * (self.current_ball_speed / BALL_SPEED_BASE)
+            effective_speed_x = abs(ball['dx']) * self.current_ball_speed / BALL_SPEED_BASE
+            effective_speed_y = abs(ball['dy']) * self.current_ball_speed / BALL_SPEED_BASE
 
-        for _ in range(steps):
-            self.ball_x += dx_step
-            self.ball_y += dy_step
+            steps = int(max(effective_speed_x, effective_speed_y)) + 1 
+            if steps == 0: 
+                balls_to_keep.append(ball)
+                continue
 
-            # Wall collisions
-            if self.ball_x - BALL_RADIUS < 0:
-                self.ball_x = BALL_RADIUS
-                self.ball_dx *= -1
-                break 
-            elif self.ball_x + BALL_RADIUS > GAME_WIDTH:
-                self.ball_x = GAME_WIDTH - BALL_RADIUS
-                self.ball_dx *= -1
-                break
-            
-            if self.ball_y - BALL_RADIUS < 0:
-                self.ball_y = BALL_RADIUS
-                self.ball_dy *= -1
-                break
+            dx_step = ball['dx'] / steps * (self.current_ball_speed / BALL_SPEED_BASE)
+            dy_step = ball['dy'] / steps * (self.current_ball_speed / BALL_SPEED_BASE)
 
-            # Paddle collision
-            if (self.ball_dy > 0 and 
-                self.ball_y + BALL_RADIUS >= GAME_HEIGHT - PADDLE_HEIGHT and 
-                # Check if ball has potential to hit in this step
-                self.ball_y + BALL_RADIUS <= GAME_HEIGHT - PADDLE_HEIGHT + abs(dy_step) + 1 and 
-                self.ball_x + BALL_RADIUS > self.player_paddle_x and 
-                self.ball_x - BALL_RADIUS < self.player_paddle_x + self.current_paddle_width):
+            collision_this_ball_this_frame = False 
+
+            for _ in range(steps):
+                if collision_this_ball_this_frame: break 
+
+                ball['x'] += dx_step
+                ball['y'] += dy_step
+
+                # Wall collisions
+                if ball['x'] - BALL_RADIUS < 0:
+                    ball['x'] = BALL_RADIUS
+                    ball['dx'] *= -1
+                    collision_this_ball_this_frame = True
+                elif ball['x'] + BALL_RADIUS > GAME_WIDTH:
+                    ball['x'] = GAME_WIDTH - BALL_RADIUS
+                    ball['dx'] *= -1
+                    collision_this_ball_this_frame = True
                 
-                self.ball_y = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS 
-                ball_center_x_on_paddle = self.ball_x - self.player_paddle_x - (self.current_paddle_width / 2)
-                normalized_impact = ball_center_x_on_paddle / (self.current_paddle_width / 2)
-                deflection_factor = 3.0
-                self.ball_dx = normalized_impact * deflection_factor
-                if abs(self.ball_dx) < 1:
-                    self.ball_dx = 1 if normalized_impact >= 0 else -1
-                self.ball_dy *= -1
-                self.score += 1
-                break 
+                if ball['y'] - BALL_RADIUS < 0:
+                    ball['y'] = BALL_RADIUS
+                    ball['dy'] *= -1
+                    collision_this_ball_this_frame = True
 
-        # Game over condition (checked after all steps or collision break)
-        if self.ball_y + BALL_RADIUS > GAME_HEIGHT:
+                # Paddle collision
+                if (ball['dy'] > 0 and 
+                    ball['y'] + BALL_RADIUS >= GAME_HEIGHT - PADDLE_HEIGHT and 
+                    ball['y'] + BALL_RADIUS <= GAME_HEIGHT - PADDLE_HEIGHT + abs(dy_step) + 1 and 
+                    ball['x'] + BALL_RADIUS > self.player_paddle_x and 
+                    ball['x'] - BALL_RADIUS < self.player_paddle_x + self.current_paddle_width):
+                    
+                    ball['y'] = GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS 
+                    ball_center_x_on_paddle = ball['x'] - self.player_paddle_x - (self.current_paddle_width / 2)
+                    normalized_impact = ball_center_x_on_paddle / (self.current_paddle_width / 2)
+                    deflection_factor = 3.0
+                    ball['dx'] = normalized_impact * deflection_factor
+                    if abs(ball['dx']) < 1:
+                        ball['dx'] = 1 if normalized_impact >= 0 else -1
+                    ball['dy'] *= -1
+                    self.score += 1
+                    collision_this_ball_this_frame = True
+
+            if ball['y'] + BALL_RADIUS > GAME_HEIGHT:
+                print(f"Ball {ball['id']} lost.")
+            else:
+                balls_to_keep.append(ball)
+
+        self.balls = balls_to_keep 
+        
+        if not self.balls and self.game_started:
             self.game_over = True
             self.game_started = False
-            self.ball_moving = False
+            self.any_ball_moving = False 
+            if 'multi_ball' in self.active_effects:
+                del self.active_effects['multi_ball']
 
-        # Brick collisions
-        new_bricks = []
-        
-        for brick in self.bricks:
-            if self.check_collision_with_brick(brick):
-                if brick['breakable']:
-                    self.score += 5
-                    self.spawn_power_up(brick['x'] + brick['width'] / 2, brick['y'] + brick['height'] / 2)
-                else:
-                    new_bricks.append(brick)
 
-                # Determine collision side for more accurate reflection
-                # Calculate overlap on X and Y axes
-                overlap_x = (BALL_RADIUS + brick['width'] / 2) - abs(self.ball_x - (brick['x'] + brick['width'] / 2))
-                overlap_y = (BALL_RADIUS + brick['height'] / 2) - abs(self.ball_y - (brick['y'] + brick['height'] / 2))
+        bricks_after_collisions = [] 
+        for brick in list(self.bricks): 
+            brick_removed_this_frame = False 
+            for ball in self.balls: 
+                if self.check_collision_with_brick(brick, ball): 
+                    if brick['breakable']:
+                        self.score += 5
+                        self.spawn_falling_item(brick['x'] + brick['width'] / 2, brick['y'] + brick['height'] / 2)
+                        brick_removed_this_frame = True 
+                    
+                    overlap_x = (BALL_RADIUS + brick['width'] / 2) - abs(ball['x'] - (brick['x'] + brick['width'] / 2))
+                    overlap_y = (BALL_RADIUS + brick['height'] / 2) - abs(ball['y'] - (brick['y'] + brick['height'] / 2))
 
-                if overlap_x > 0 and overlap_y > 0: # There is an actual overlap
-                    if overlap_x < overlap_y: # Collision was primarily horizontal
-                        self.ball_dx *= -1
-                        # Adjust ball position to prevent sticking
-                        if self.ball_x < brick['x'] + brick['width'] / 2: # Hit left side
-                            self.ball_x = brick['x'] - BALL_RADIUS
-                        else: # Hit right side
-                            self.ball_x = brick['x'] + brick['width'] + BALL_RADIUS
-                    else: # Collision was primarily vertical
-                        self.ball_dy *= -1
-                        # Adjust ball position to prevent sticking
-                        if self.ball_y < brick['y'] + brick['height'] / 2: # Hit top
-                            self.ball_y = brick['y'] - BALL_RADIUS
-                        else: # Hit bottom
-                            self.ball_y = brick['y'] + brick['height'] + BALL_RADIUS
-            else:
-                new_bricks.append(brick)
+                    if overlap_x > 0 and overlap_y > 0:
+                        if overlap_x < overlap_y: 
+                            ball['dx'] *= -1
+                            if ball['x'] < brick['x'] + brick['width'] / 2: 
+                                ball['x'] = brick['x'] - BALL_RADIUS
+                            else:
+                                ball['x'] = brick['x'] + brick['width'] + BALL_RADIUS
+                        else: 
+                            ball['dy'] *= -1
+                            if ball['y'] < brick['y'] + brick['height'] / 2:
+                                ball['y'] = brick['y'] - BALL_RADIUS
+                            else:
+                                ball['y'] = brick['y'] + brick['height'] + BALL_RADIUS
+                    
+                    if brick_removed_this_frame:
+                        break 
+            
+            if not brick_removed_this_frame: 
+                bricks_after_collisions.append(brick)
 
-        self.bricks = new_bricks
+        self.bricks = bricks_after_collisions 
 
-    def check_collision_with_brick(self, brick):
-        ball_center_x = self.ball_x
-        ball_center_y = self.ball_y
-        ball_radius = BALL_RADIUS
+    def check_collision_with_brick(self, brick, ball_obj): 
+        ball_center_x = ball_obj['x']
+        ball_center_y = ball_obj['y']
+        ball_radius = BALL_RADIUS 
         closest_x = max(brick['x'], min(ball_center_x, brick['x'] + brick['width']))
         closest_y = max(brick['y'], min(ball_center_y, brick['y'] + brick['height']))
         distance_x = ball_center_x - closest_x
@@ -233,83 +271,117 @@ class Game:
 
         PADDLE_MOVE_AMOUNT = 20
 
-        if not self.ball_moving:
+        if not self.any_ball_moving and self.balls:
+            old_paddle_x = self.player_paddle_x
             if direction == 'left':
                 self.player_paddle_x = max(0, self.player_paddle_x - PADDLE_MOVE_AMOUNT)
-                self.ball_x = self.player_paddle_x + (self.current_paddle_width // 2)
             elif direction == 'right':
                 self.player_paddle_x = min(GAME_WIDTH - self.current_paddle_width, self.player_paddle_x + PADDLE_MOVE_AMOUNT)
-                self.ball_x = self.player_paddle_x + (self.current_paddle_width // 2)
-        else:
+            
+            paddle_dx = self.player_paddle_x - old_paddle_x
+            if self.balls:
+                self.balls[0]['x'] += paddle_dx
+        else: 
             if direction == 'left':
                 self.player_paddle_x = max(0, self.player_paddle_x - PADDLE_MOVE_AMOUNT)
             elif direction == 'right':
                 self.player_paddle_x = min(GAME_WIDTH - self.current_paddle_width, self.player_paddle_x + PADDLE_MOVE_AMOUNT)
 
 
-    # --- Power-up related functions ---
-    def spawn_power_up(self, x, y):
-        if random.random() < 0.3: # 30% chance to drop a power-up
-            power_up_type = random.choice(['slow_ball', 'enlarge_paddle'])
-            self.power_ups.append({
-                'id': str(uuid.uuid4()), # Unique ID for each power-up
-                'type': power_up_type,
-                'x': x - POWER_UP_RADIUS, # Center the power-up
+    def spawn_falling_item(self, x, y):
+        if random.random() < 0.4: 
+            item_type = random.choice(['slow_ball', 'enlarge_paddle', 'fast_ball', 'multi_ball']) 
+            self.falling_items.append({
+                'id': str(uuid.uuid4()), 
+                'type': item_type,
+                'x': x - POWER_UP_RADIUS, 
                 'y': y - POWER_UP_RADIUS,
                 'radius': POWER_UP_RADIUS
             })
 
-    def move_power_ups(self):
-        for pu in self.power_ups:
-            pu['y'] += POWER_UP_FALL_SPEED
-            # Remove power-ups that fall off screen
-        self.power_ups = [pu for pu in self.power_ups if pu['y'] < GAME_HEIGHT]
+    def move_falling_items(self):
+        for item in self.falling_items:
+            item['y'] += POWER_UP_FALL_SPEED
+        self.falling_items = [item for item in self.falling_items if item['y'] < GAME_HEIGHT]
 
-    def check_power_up_collisions(self):
-        collected_power_ups = []
-        for pu in self.power_ups:
-            # Check collision with paddle
-            if (pu['y'] + pu['radius'] > GAME_HEIGHT - PADDLE_HEIGHT and
-                pu['y'] - pu['radius'] < GAME_HEIGHT and
-                pu['x'] + pu['radius'] > self.player_paddle_x and
-                pu['x'] - pu['radius'] < self.player_paddle_x + self.current_paddle_width): # Use current_paddle_width
+    def check_falling_item_collisions(self):
+        collected_items = []
+        for item in self.falling_items:
+            if (item['y'] + item['radius'] > GAME_HEIGHT - PADDLE_HEIGHT and
+                item['y'] - item['radius'] < GAME_HEIGHT and
+                item['x'] + item['radius'] > self.player_paddle_x and
+                item['x'] - item['radius'] < self.player_paddle_x + self.current_paddle_width):
 
-                collected_power_ups.append(pu)
-                self.apply_power_up(pu)
+                collected_items.append(item)
+                self.apply_effect(item) 
 
-        # Remove collected power-ups
-        self.power_ups = [pu for pu in self.power_ups if pu not in collected_power_ups]
+        self.falling_items = [item for item in self.falling_items if item not in collected_items]
 
-    def apply_power_up(self, power_up):
+    def apply_effect(self, item): 
         current_time = time.time()
-        if power_up['type'] == 'slow_ball':
+        if item['type'] == 'slow_ball':
             print("Applying slow_ball power-up!")
             self.current_ball_speed = BALL_SPEED_BASE * BALL_SLOW_FACTOR
-            self.active_power_ups['slow_ball'] = current_time + BALL_SLOW_DURATION_SECONDS
-        elif power_up['type'] == 'enlarge_paddle':
+            self.active_effects['slow_ball'] = current_time + BALL_SLOW_DURATION_SECONDS
+        elif item['type'] == 'enlarge_paddle':
             print("Applying enlarge_paddle power-up!")
             self.current_paddle_width = PADDLE_WIDTH * PADDLE_ENLARGE_FACTOR
-            # Adjust paddle position if it goes off-screen after enlarging
             self.player_paddle_x = min(GAME_WIDTH - self.current_paddle_width, self.player_paddle_x)
-            self.active_power_ups['enlarge_paddle'] = current_time + PADDLE_ENLARGE_DURATION_SECONDS
+            self.active_effects['enlarge_paddle'] = current_time + PADDLE_ENLARGE_DURATION_SECONDS
+        elif item['type'] == 'fast_ball': 
+            print("Applying fast_ball de-buff!")
+            self.current_ball_speed = BALL_SPEED_BASE * BALL_FAST_FACTOR
+            self.active_effects['fast_ball'] = current_time + BALL_FAST_DURATION_SECONDS
+        elif item['type'] == 'multi_ball': 
+            print("Applying multi_ball de-buff!")
+            initial_x = self.balls[0]['x'] if self.balls else (self.player_paddle_x + self.current_paddle_width // 2)
+            initial_y = self.balls[0]['y'] if self.balls else (GAME_HEIGHT - PADDLE_HEIGHT - BALL_RADIUS - 1)
+            
+            for i in range(MULTI_BALL_COUNT): 
+                new_dx = random.choice([-1, 1]) * (BALL_SPEED_BASE // 2 + random.randint(0,2))
+                new_dy = -BALL_SPEED_BASE
+                
+                offset_x = (i - MULTI_BALL_COUNT // 2) * (BALL_RADIUS * 2 + 5) 
+                self.create_new_ball(initial_x + offset_x, initial_y, new_dx, new_dy, ball_type='multi') # <-- This line is confirmed correct for type assignment
+                
+                if self.game_started and self.any_ball_moving:
+                    self.balls[-1]['is_moving'] = True 
+            
+            self.active_effects['multi_ball'] = current_time + MULTI_BALL_DURATION_SECONDS
 
-    def check_active_power_ups(self):
+
+    def check_active_effects(self): 
         current_time = time.time()
-        expired_power_ups = []
-        for pu_type, end_time in self.active_power_ups.items():
+        expired_effects = []
+        for effect_type, end_time in self.active_effects.items():
             if current_time >= end_time:
-                expired_power_ups.append(pu_type)
+                expired_effects.append(effect_type)
 
-        for pu_type in expired_power_ups:
-            print(f"Power-up {pu_type} expired.")
-            if pu_type == 'slow_ball':
-                self.current_ball_speed = BALL_SPEED_BASE
-            elif pu_type == 'enlarge_paddle':
+        for effect_type in expired_effects:
+            print(f"Effect {effect_type} expired.")
+            if effect_type == 'slow_ball' or effect_type == 'fast_ball': 
+                if 'slow_ball' not in self.active_effects and 'fast_ball' not in self.active_effects:
+                    self.current_ball_speed = BALL_SPEED_BASE
+                elif effect_type == 'slow_ball' and 'fast_ball' in self.active_effects:
+                    self.current_ball_speed = BALL_SPEED_BASE * BALL_FAST_FACTOR
+                elif effect_type == 'fast_ball' and 'slow_ball' in self.active_effects:
+                    self.current_ball_speed = BALL_SPEED_BASE * BALL_SLOW_FACTOR
+            elif effect_type == 'enlarge_paddle':
                 self.current_paddle_width = PADDLE_WIDTH
-            del self.active_power_ups[pu_type]
+            elif effect_type == 'multi_ball': 
+                if len(self.balls) > 1:
+                    main_ball = self.balls[0] if self.balls else None
+                    if main_ball:
+                        self.balls = [ball for ball in self.balls if ball.get('type', 'normal') == 'normal'] 
+                        print("Multi-ball effect ended. Extra balls removed.")
+                    else:
+                        self.balls = [] 
+                if not self.balls and self.game_started: # Secondary check for game over if multi-ball ends and no balls are left
+                    self.game_over = True
+                    self.game_started = False
+                    self.any_ball_moving = False
 
-    # --- End of Power-up related functions ---
-
+            del self.active_effects[effect_type]
 
     def start_game_loop(self):
         if self._game_loop_thread is None or not self._game_loop_thread.is_alive():
@@ -352,11 +424,15 @@ def handle_start_game():
     if not game.game_started:
         if game.game_over:
             game.reset_game()
+        
+        for ball in game.balls:
+            ball['is_moving'] = True
+            if ball['dx'] == 0 and ball['dy'] == 0:
+                ball['dx'] = (game.current_ball_speed // 2) if ball['x'] < GAME_WIDTH // 2 else -(game.current_ball_speed // 2)
+                ball['dy'] = -game.current_ball_speed
+
         game.game_started = True
-        game.ball_moving = True
-        # Ensure initial ball speed is based on BALL_SPEED_BASE
-        game.ball_dx = (BALL_SPEED_BASE // 2) if game.ball_x < GAME_WIDTH // 2 else -(BALL_SPEED_BASE // 2)
-        game.ball_dy = -BALL_SPEED_BASE
+        game.any_ball_moving = True 
         game.start_game_loop()
         emit('game_state', game.get_game_state())
 

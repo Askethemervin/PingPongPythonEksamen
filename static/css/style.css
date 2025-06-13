@@ -46,19 +46,29 @@ body {
     height: 600px;
 }
 
-#ball {
+/* Changed from #ball to .ball to support multiple balls */
+.ball { 
     position: absolute;
     width: 30px;
     height: 30px;
-    background-image: url('../images/drop.png'); /* Corrected path */
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    background-color: transparent;
+    background-color: transparent; /* Changed from background-image to allow overrides */
     border-radius: 0;
     border: none;
     box-shadow: none;
     transition: left 0.016s linear, top 0.016s linear;
+    z-index: 10;
+}
+
+/* Default ball image */
+.ball.normal { /* New: Base class for normal balls */
+    background-image: url('../images/drop.png');
+}
+
+.ball.multi { /* New: Class for multi-ball spawned balls */
+    background-image: url('../images/green-drop.png'); /* <-- YOUR NEW IMAGE HERE (e.g., a green drop.png) */
 }
 
 #player-paddle {
@@ -143,22 +153,30 @@ body {
     border: none;
 }
 
-/* Power-up styles */
-.power-up {
+/* Power-up and Debuff styles (now generically called 'power-up' in CSS) */
+.power-up { 
     position: absolute;
-    width: 30px; /* Use POWER_UP_RADIUS * 2 from app.py */
-    height: 30px; /* Use POWER_UP_RADIUS * 2 from app.py */
+    width: 30px; 
+    height: 30px; 
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    z-index: 8; /* Ensure it's above bricks but below ball/paddle */
-    transition: top 0.016s linear; /* Smooth falling animation */
+    z-index: 8; 
+    transition: top 0.016s linear; 
 }
 
 .power-up.slow_ball {
-    background-image: url('../images/snail.png'); /* You'll need this image */
+    background-image: url('../images/snail.png'); 
 }
 
 .power-up.enlarge_paddle {
-    background-image: url('../images/big-paddle.png'); /* You'll need this image */
+    background-image: url('../images/big-paddle.png'); 
+}
+
+.power-up.fast_ball { 
+    background-image: url('../images/lightning.png'); 
+}
+
+.power-up.multi_ball {
+    background-image: url('../images/green-drop.png'); 
 }

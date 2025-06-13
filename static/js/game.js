@@ -1,26 +1,19 @@
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
-    const ball = document.getElementById('ball');
     const playerPaddle = document.getElementById('player-paddle');
     const scoreDisplay = document.getElementById('score');
     const gameOverMessage = document.getElementById('game-over-message');
     const gameBoard = document.getElementById('game-board');
-    const powerUpContainer = document.getElementById('power-up-container'); // New: Get power-up container
+    const powerUpContainer = document.getElementById('power-up-container'); 
 
     const GAME_WIDTH = 800;
     const GAME_HEIGHT = 600;
-    // PADDLE_HEIGHT is used for paddle positioning, not necessarily its visual height if image is different
-    const PADDLE_HEIGHT = 15; // Still used for vertical positioning in the game engine
+    const PADDLE_HEIGHT = 15; 
     const BALL_RADIUS = 10;
-    const PADDLE_WIDTH_BASE = 100; // Base paddle width
+    const PADDLE_WIDTH_BASE = 100; 
     const GAME_LOOP_INTERVAL_MS = 16;
-    const POWER_UP_RADIUS = 15; // Match this with POWER_UP_RADIUS in app.py
+    const POWER_UP_RADIUS = 15; 
 
-    ball.style.width = `${BALL_RADIUS * 2}px`;
-    ball.style.height = `${BALL_RADIUS * 2}px`;
-    ball.style.zIndex = '10';
-    
-    // Initial paddle width (will be updated by game_state)
     playerPaddle.style.width = `${PADDLE_WIDTH_BASE}px`; 
     playerPaddle.style.height = `${PADDLE_HEIGHT}px`;
     playerPaddle.style.bottom = '0px';
@@ -29,28 +22,24 @@ document.addEventListener('DOMContentLoaded', () => {
     gameBoard.style.height = `${GAME_HEIGHT}px`;
 
     const ballTransitionStyle = `left ${GAME_LOOP_INTERVAL_MS / 1000}s linear, top ${GAME_LOOP_INTERVAL_MS / 1000}s linear`;
-    const paddleTransitionStyle = `left ${GAME_LOOP_INTERVAL_MS / 1000}s linear, width ${GAME_LOOP_INTERVAL_MS / 1000}s linear`; // Added width transition
+    const paddleTransitionStyle = `left ${GAME_LOOP_INTERVAL_MS / 1000}s linear, width ${GAME_LOOP_INTERVAL_MS / 1000}s linear`; 
 
     const existingBricks = new Map();
     const brickIds = new Set();
-    const existingPowerUps = new Map(); // New: Map to track existing power-up elements
-    const powerUpIds = new Set(); // New: Set to track active power-up IDs
+    const existingFallingItems = new Map(); 
+    const fallingItemIds = new Set(); 
+    const existingBalls = new Map(); 
+    const ballIds = new Set(); 
 
     let keysPressed = {};
     let paddleMoveInterval = null;
 
     socket.on('game_state', (data) => {
-        // Update ball and paddle
-        ball.style.left = `${data.ball_x - (ball.offsetWidth / 2)}px`;
-        ball.style.top = `${data.ball_y - (ball.offsetHeight / 2)}px`;
         playerPaddle.style.left = `${data.player_paddle_x}px`;
-        
-        // Update paddle width based on server state
         playerPaddle.style.width = `${data.player_paddle_width}px`;
 
         scoreDisplay.textContent = data.score;
 
-        // Update game messages
         if (data.game_over) {
             gameOverMessage.classList.remove('hidden');
             gameOverMessage.textContent = 'Game Over! Press SPACE to restart.';
@@ -61,16 +50,59 @@ document.addEventListener('DOMContentLoaded', () => {
             gameOverMessage.classList.add('hidden');
         }
 
-        // Apply transitions based on game state
-        if (data.game_over || !data.ball_moving) {
-            ball.style.transition = 'none';
+        // --- Ball rendering logic (Multi-ball) ---
+        ballIds.clear();
+        data.balls.forEach(ball_data => {
+            ballIds.add(ball_data.id);
+
+            let ballElem = existingBalls.get(ball_data.id);
+            if (!ballElem) {
+                console.log(`Creating new ball element for ID: ${ball_data.id}, type: ${ball_data.type}`); // Log ved oprettelse
+                ballElem = document.createElement('div');
+                ballElem.id = `ball-${ball_data.id}`; 
+                ballElem.classList.add('ball'); // All balls get 'ball' class
+                ballElem.style.width = `${BALL_RADIUS * 2}px`;
+                ballElem.style.height = `${BALL_RADIUS * 2}px`;
+                ballElem.style.zIndex = '10'; 
+                gameBoard.appendChild(ballElem);
+                existingBalls.set(ball_data.id, ballElem);
+            }
+
+            // Dette er den vigtigste del at debugge
+            ballElem.classList.toggle('normal', ball_data.type === 'normal');
+            ballElem.classList.toggle('multi', ball_data.type === 'multi'); 
+
+            // Log efter klasser er toggled
+            console.log(`Updating ball ID: ${ball_data.id}, data.type: "${ball_data.type}", current classes: "${ballElem.className}"`);
+
+            ballElem.style.left = `${ball_data.x - BALL_RADIUS}px`; 
+            ballElem.style.top = `${ball_data.y - BALL_RADIUS}px`; 
+
+            if (!ball_data.is_moving || data.game_over) {
+                ballElem.style.transition = 'none';
+            } else {
+                ballElem.style.transition = ballTransitionStyle;
+            }
+        });
+
+        for (let [id, elem] of existingBalls.entries()) {
+            if (!ballIds.has(id)) {
+                console.log(`Removing ball element for ID: ${id}`); // Log ved fjernelse
+                elem.remove();
+                existingBalls.delete(id);
+            }
+        }
+        // --- End Ball rendering logic ---
+
+
+        if (data.game_over || !data.game_started) { 
             playerPaddle.style.transition = 'none';
         } else {
-            ball.style.transition = ballTransitionStyle;
             playerPaddle.style.transition = paddleTransitionStyle;
         }
 
-        // Update bricks
+
+        // Update bricks (unchanged)
         brickIds.clear();
         data.bricks.forEach((brick, index) => {
             const id = `brick-${index}`;
@@ -99,35 +131,34 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // --- Power-up rendering logic ---
-        powerUpIds.clear();
-        data.power_ups.forEach(pu => {
-            powerUpIds.add(pu.id);
+        // --- Falling Item (Power-up/Debuff) rendering logic (unchanged) ---
+        fallingItemIds.clear();
+        data.falling_items.forEach(item => { 
+            fallingItemIds.add(item.id);
 
-            let powerUpElem = existingPowerUps.get(pu.id);
-            if (!powerUpElem) {
-                powerUpElem = document.createElement('div');
-                powerUpElem.id = pu.id;
-                powerUpElem.classList.add('power-up');
-                powerUpElem.classList.add(pu.type); // Add class for specific power-up type (e.g., 'slow_ball')
-                powerUpElem.style.width = `${POWER_UP_RADIUS * 2}px`;
-                powerUpElem.style.height = `${POWER_UP_RADIUS * 2}px`;
-                powerUpContainer.appendChild(powerUpElem); // Append to the new container
-                existingPowerUps.set(pu.id, powerUpElem);
+            let itemElem = existingFallingItems.get(item.id);
+            if (!itemElem) {
+                itemElem = document.createElement('div');
+                itemElem.id = item.id;
+                itemElem.classList.add('power-up'); 
+                itemElem.classList.add(item.type); 
+                itemElem.style.width = `${POWER_UP_RADIUS * 2}px`;
+                itemElem.style.height = `${POWER_UP_RADIUS * 2}px`;
+                powerUpContainer.appendChild(itemElem); 
+                existingFallingItems.set(item.id, itemElem);
             }
-            powerUpElem.style.left = `${pu.x}px`;
-            powerUpElem.style.top = `${pu.y}px`;
-            powerUpElem.style.transition = `top ${GAME_LOOP_INTERVAL_MS / 1000}s linear`; // Smooth falling animation
+            itemElem.style.left = `${item.x}px`;
+            itemElem.style.top = `${item.y}px`;
+            itemElem.style.transition = `top ${GAME_LOOP_INTERVAL_MS / 1000}s linear`; 
         });
 
-        // Remove power-up elements that no longer exist in the game state
-        for (let [id, elem] of existingPowerUps.entries()) {
-            if (!powerUpIds.has(id)) {
+        for (let [id, elem] of existingFallingItems.entries()) {
+            if (!fallingItemIds.has(id)) {
                 elem.remove();
-                existingPowerUps.delete(id);
+                existingFallingItems.delete(id);
             }
         }
-        // --- End Power-up rendering logic ---
+        // --- End Falling Item rendering logic ---
     });
 
     document.addEventListener('keydown', (e) => {
