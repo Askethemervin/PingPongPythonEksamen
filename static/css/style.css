@@ -68,7 +68,7 @@ body {
 }
 
 .ball.multi { /* New: Class for multi-ball spawned balls */
-    background-image: url('../images/green-drop.png'); /* <-- YOUR NEW IMAGE HERE (e.g., a green drop.png) */
+    background-image: url('../images/multi-ball-drop.png'); /* <-- YOUR NEW IMAGE HERE (e.g., a green drop.png) */
 }
 
 #player-paddle {
@@ -116,6 +116,7 @@ body {
     background-color: #E6F3FB;
     box-shadow: 5px 5px 15px rgba(0,0,0,0.3);
     min-width: 150px;
+    gap: 20px; /* Tilføj lidt plads mellem score og controls-info */
 }
 
 #game-info p {
@@ -177,6 +178,29 @@ body {
     background-image: url('../images/lightning.png'); 
 }
 
-.power-up.multi_ball {
+.power-up.multi_ball { /* Now uses the same image as the normal ball for the falling item */
     background-image: url('../images/green-drop.png'); 
+}
+
+/* Styles for the new controls-info section */
+#controls-info {
+    text-align: center;
+    padding-top: 15px;
+    border-top: 2px solid #a3d9f2; /* En lettere kant for at adskille fra score */
+    margin-top: 15px; /* Plads over kanten */
+}
+
+#controls-info img#arrow-keys-image {
+    width: 100px; /* Juster størrelsen på piletast-billedet */
+    height: auto;
+    margin-bottom: 10px;
+    filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.2)); /* Lidt skygge */
+}
+
+#controls-info p {
+    color: #1E6091; /* Samme farve som anden tekst */
+    font-size: 0.9em; /* Lidt mindre tekst */
+    line-height: 1.4; /* Lidt plads mellem linjerne */
+    margin: 5px 0; /* Mindre margin mellem paragrafene */
+    font-weight: normal; /* Normal vægt for instruktionstekst */
 }
