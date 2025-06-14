@@ -19,19 +19,16 @@ BALL_RADIUS = 10
 GAME_LOOP_INTERVAL_MS = 16
 BALL_SPEED_BASE = 5
 
-# Power-up specific constants
+
 POWER_UP_FALL_SPEED = 2
-POWER_UP_RADIUS = 15 # For collision detection
+POWER_UP_RADIUS = 15 
 PADDLE_ENLARGE_DURATION_SECONDS = 20
 PADDLE_ENLARGE_FACTOR = 1.5
 BALL_SLOW_DURATION_SECONDS = 10
 BALL_SLOW_FACTOR = 0.5
-
-# Debuff specific constants
 BALL_FAST_DURATION_SECONDS = 10
-BALL_FAST_FACTOR = 1.8 # Make the ball significantly faster
-# MULTI_BALL_DURATION_SECONDS = 15 # Not needed for timed multi-ball
-MULTI_BALL_COUNT = 2 # How many additional balls to spawn per existing ball
+BALL_FAST_FACTOR = 1.8
+MULTI_BALL_COUNT = 2
 
 class Game:
     def __init__(self):
@@ -39,8 +36,8 @@ class Game:
         self.level_index = 0
         self.reset_game()
         self._game_loop_thread = None
-        self.falling_items = [] # Renamed from power_ups to include debuffs
-        self.active_effects = {} # Renamed from active_power_ups to include all effects
+        self.falling_items = [] 
+        self.active_effects = {} 
 
     def generate_brick_grid(self, rows, cols, start_x, start_y, brick_width, brick_height, spacing_x, spacing_y, pattern_fn):
         bricks = []
@@ -74,7 +71,7 @@ class Game:
         self.current_paddle_width = PADDLE_WIDTH 
         
         self.balls = [] 
-        self.create_new_ball(ball_type='normal') # Ensure initial ball is 'normal' type
+        self.create_new_ball(ball_type='normal')
 
         self.current_ball_speed = BALL_SPEED_BASE 
         self.score = 0
@@ -106,7 +103,7 @@ class Game:
             'dx': new_ball_dx,
             'dy': new_ball_dy,
             'is_moving': False,
-            'type': ball_type # Make sure this 'type' key is consistently set
+            'type': ball_type 
         })
 
     def get_game_state(self):
@@ -205,26 +202,21 @@ class Game:
 
             if ball['y'] + BALL_RADIUS > GAME_HEIGHT:
                 print(f"Ball {ball['id']} lost.")
-                # No specific 'multi' ball check here, as the count of multi-balls is checked after the loop
             else:
                 balls_to_keep.append(ball)
 
         self.balls = balls_to_keep 
-        
-        # Check if multi_ball effect should end after updating the ball list
+
         if 'multi_ball' in self.active_effects:
-            # Count how many 'multi' type balls are still in play
             multi_balls_remaining = sum(1 for ball in self.balls if ball.get('type') == 'multi')
             if multi_balls_remaining == 0:
                 print("Multi-ball effect ended because all multi-balls were lost.")
-                del self.active_effects['multi_ball'] # Deactivate the effect
+                del self.active_effects['multi_ball']
 
-        # Check if any balls are left at all. If not, game over.
         if not self.balls and self.game_started:
             self.game_over = True
             self.game_started = False
             self.any_ball_moving = False 
-            # If multi_ball effect was active, ensure it's removed if game ends due to no balls
             if 'multi_ball' in self.active_effects:
                 del self.active_effects['multi_ball']
 
@@ -336,7 +328,7 @@ class Game:
         elif item['type'] == 'enlarge_paddle':
             print("Applying enlarge_paddle power-up!")
             self.current_paddle_width = PADDLE_WIDTH * PADDLE_ENLARGE_FACTOR
-            # Ensure paddle stays within bounds after enlarging
+
             self.player_paddle_x = min(GAME_WIDTH - self.current_paddle_width, self.player_paddle_x)
             self.active_effects['enlarge_paddle'] = current_time + PADDLE_ENLARGE_DURATION_SECONDS
         elif item['type'] == 'fast_ball': 
@@ -345,71 +337,65 @@ class Game:
             self.active_effects['fast_ball'] = current_time + BALL_FAST_DURATION_SECONDS
         elif item['type'] == 'multi_ball': 
             print("Applying multi_ball effect: Spawning more balls!")
-            # Store the current balls to iterate over them, as new balls will be added
+
             current_balls_at_effect_time = list(self.balls)
 
             for existing_ball in current_balls_at_effect_time:
-                # For each existing ball, spawn MULTI_BALL_COUNT new balls
                 for i in range(MULTI_BALL_COUNT):
-                    # Slight variations for dx and dy to make them spread out
+
                     new_dx = random.choice([-1, 1]) * (BALL_SPEED_BASE // 2 + random.randint(0,2))
                     new_dy = -BALL_SPEED_BASE
-                    
-                    # Offset new balls slightly from the existing ball's position
-                    # to prevent immediate overlap or identical trajectory
+
                     offset_x = (i - MULTI_BALL_COUNT // 2) * (BALL_RADIUS * 2 + 5) 
                     self.create_new_ball(
                         existing_ball['x'] + offset_x,
                         existing_ball['y'],
                         new_dx,
                         new_dy,
-                        ball_type='multi' # Mark these new balls as 'multi' type
+                        ball_type='multi'
                     )
                     
-                    # If the game is already started and balls are moving, make the new balls move too
                     if self.game_started and self.any_ball_moving:
                         self.balls[-1]['is_moving'] = True 
             
-            # For multi_ball, we just mark it as active, no specific end time
-            self.active_effects['multi_ball'] = True # Set to True to indicate it's active
+
+            self.active_effects['multi_ball'] = True
 
 
     def check_active_effects(self): 
         current_time = time.time()
         expired_effects = []
-        for effect_type, end_time in list(self.active_effects.items()): # Use list() to allow modification during iteration
+        for effect_type, end_time in list(self.active_effects.items()): 
             if effect_type == 'multi_ball':
-                # Multi-ball is handled separately based on ball count, not time
+                
                 continue 
 
             if current_time >= end_time:
                 expired_effects.append(effect_type)
 
-        # First, remove all expired effects (excluding multi_ball, which is handled in move_balls_with_collisions)
         for effect_type in expired_effects:
             print(f"Effect {effect_type} expired.")
             if effect_type == 'enlarge_paddle':
                 self.current_paddle_width = PADDLE_WIDTH
             
-            # Remove the effect from active_effects after applying its reset logic
-            if effect_type in self.active_effects: # Double check in case of concurrent modification
+
+            if effect_type in self.active_effects:
                 del self.active_effects[effect_type]
 
-        # Store the old speed to check for changes before re-evaluation
         old_ball_speed = self.current_ball_speed
 
-        # After all *timed* expired effects are removed, re-evaluate ball speed based on remaining active effects
+
         if 'fast_ball' in self.active_effects:
             self.current_ball_speed = BALL_SPEED_BASE * BALL_FAST_FACTOR
-            if old_ball_speed != self.current_ball_speed: # Only print if speed changed
+            if old_ball_speed != self.current_ball_speed: 
                 print(f"Ball speed set to FAST: {self.current_ball_speed}")
         elif 'slow_ball' in self.active_effects:
             self.current_ball_speed = BALL_SPEED_BASE * BALL_SLOW_FACTOR
-            if old_ball_speed != self.current_ball_speed: # Only print if speed changed
+            if old_ball_speed != self.current_ball_speed: 
                 print(f"Ball speed set to SLOW: {self.current_ball_speed}")
         else:
             self.current_ball_speed = BALL_SPEED_BASE
-            if old_ball_speed != self.current_ball_speed: # Only print if speed changed
+            if old_ball_speed != self.current_ball_speed: 
                 print(f"Ball speed reset to BASE: {self.current_ball_speed}")
 
     def start_game_loop(self):
